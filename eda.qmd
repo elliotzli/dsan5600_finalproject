@@ -1,0 +1,1035 @@
+---
+title: "Exploratory Data Analysis"
+subtitle: "Time Series Plot, Lag Plot, ACF, PACF, and Augmented Dickey-Fuller Test"
+format: 
+  html:
+    smooth-scroll: true
+    toc: true
+    code-fold: true
+    code-tools: true
+    embed-resources: true
+    mermaid:
+      theme: neutral
+bibliography: citation.bib
+execute: 
+  echo: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(warning=FALSE, message=FALSE)
+
+library(readxl)
+library(ggplot2)
+library(forecast)
+library(tseries)
+library(xts)
+library(tidyverse)
+```
+
+## Treasury Bill Constant Maturities Minus Federal Funds Rate
+
+::: {.panel-tabset}
+
+## 3-Month T-Bill Yield Minus Federal Funds Rate
+```{r fig.width=8, fig.height=4}
+df <- read_excel('data/data/sr_t-bill-rates.xlsx')
+df$observation_date <- as.Date(df$observation_date)
+columns <- c("T3MFF")
+
+for (col in columns) {
+  xts_data <- xts(df[, col], order.by = df$observation_date)
+  ts_data <- ts(df[, col], start=c(1982, 1, 4), frequency=252)
+  decomposed <- decompose(ts_data)
+  
+  plot(decomposed$x, main = paste("Original Time Series:", col), xlab = 'Date', ylab = 'Value')
+  plot(decomposed$trend, main = "Trend Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$seasonal, main = "Seasonal Component", xlab = 'Date', ylab = 'Value',ylim = c(-0.5,0.5))
+  plot(decomposed$random, main = "Remainder Component", xlab = 'Date', ylab = 'Value')
+  lag.plot(ts_data, lags=1, do.lines=FALSE, main="Lag Plot")
+  acf_data <- acf(ts_data, main=paste("ACF Plot:", col))
+  dacf_data <- pacf(ts_data, main=paste("PACF Plot:", col))
+  diff_ts_data <- diff(ts_data)
+  acf(diff_ts_data, main=paste("ACF After Differencing:", col))
+  pacf(diff_ts_data, main=paste("PACF After Differencing:", col))
+  }
+
+for (col in columns) {
+  
+  trend <- decomposed$trend
+  if (!is.null(trend)) {
+    trend_mean <- mean(trend, na.rm = TRUE)
+    trend_sd <- sd(trend, na.rm = TRUE)
+    trend_trend <- ifelse(trend_mean > 0, "increasing", "decreasing")
+    cat("The trend component suggests a", trend_trend, "trend, \nwith an average value of", round(trend_mean, 2), "and a standard deviation of", round(trend_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible trend component.\n\n")
+  }
+  
+  seasonal <- decomposed$seasonal
+  if (!is.null(seasonal)) {
+    seasonal_mean <- mean(seasonal, na.rm = TRUE)
+    seasonal_sd <- sd(seasonal, na.rm = TRUE)
+    cat("The seasonal component suggests a repeating pattern, \nwith an average value of", round(seasonal_mean, 2), "and a standard deviation of", round(seasonal_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible seasonal component.\n\n")
+  }
+  
+  remainder <- decomposed$random
+  if (!is.null(remainder)) {
+    remainder_mean <- mean(remainder, na.rm = TRUE)
+    remainder_sd <- sd(remainder, na.rm = TRUE)
+    cat("The remainder component suggests random fluctuations, \nwith an average value of", round(remainder_mean, 2), "and a standard deviation of", round(remainder_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible remainder component.\n\n")
+  }
+  
+  if (decomposed$type == "multiplicative") {
+    cat("The time series appears to be multiplicative.\n\n")
+  } else {
+    cat("The time series appears to be additive.\n\n")
+  }
+  
+  adf_test <- adf.test(ts_data)
+  cat("Augmented Dickey-Fuller Test Results:\n")
+  cat("Test Statistic:", adf_test$statistic, "\n")
+  cat("P-value:", adf_test$p.value, "\n")
+  cat("Critical Values:", adf_test$critical, "\n")
+  if (adf_test$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")}
+
+  adf_test_diff <- adf.test(diff_ts_data)
+  cat("Augmented Dickey-Fuller Test Results After Differencing:\n")
+  cat("Test Statistic:", adf_test_diff$statistic, "\n")
+  cat("P-value:", adf_test_diff$p.value, "\n")
+  cat("Critical Values:", adf_test_diff$critical, "\n")
+  if (adf_test_diff$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")
+  }
+  }
+```
+
+## 6-Month T-Bill Yield Minus Federal Funds Rate
+```{r fig.width=8, fig.height=4}
+df <- read_excel('data/data/sr_t-bill-rates.xlsx')
+df$observation_date <- as.Date(df$observation_date)
+columns <- c("T6MFF")
+
+for (col in columns) {
+  xts_data <- xts(df[, col], order.by = df$observation_date)
+  ts_data <- ts(df[, col], start=c(1982, 1, 4), frequency=252)
+  decomposed <- decompose(ts_data)
+  
+  plot(decomposed$x, main = paste("Original Time Series:", col), xlab = 'Date', ylab = 'Value')
+  plot(decomposed$trend, main = "Trend Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$seasonal, main = "Seasonal Component", xlab = 'Date', ylab = 'Value',ylim = c(-0.5,0.5))
+  plot(decomposed$random, main = "Remainder Component", xlab = 'Date', ylab = 'Value')
+  lag.plot(ts_data, lags=1, do.lines=FALSE, main="Lag Plot")
+  acf_data <- acf(ts_data, main=paste("ACF Plot:", col))
+  dacf_data <- pacf(ts_data, main=paste("PACF Plot:", col))
+  diff_ts_data <- diff(ts_data)
+  acf(diff_ts_data, main=paste("ACF After Differencing:", col))
+  pacf(diff_ts_data, main=paste("PACF After Differencing:", col))
+  }
+
+for (col in columns) {
+  
+  trend <- decomposed$trend
+  if (!is.null(trend)) {
+    trend_mean <- mean(trend, na.rm = TRUE)
+    trend_sd <- sd(trend, na.rm = TRUE)
+    trend_trend <- ifelse(trend_mean > 0, "increasing", "decreasing")
+    cat("The trend component suggests a", trend_trend, "trend, \nwith an average value of", round(trend_mean, 2), "and a standard deviation of", round(trend_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible trend component.\n\n")
+  }
+  
+  seasonal <- decomposed$seasonal
+  if (!is.null(seasonal)) {
+    seasonal_mean <- mean(seasonal, na.rm = TRUE)
+    seasonal_sd <- sd(seasonal, na.rm = TRUE)
+    cat("The seasonal component suggests a repeating pattern, \nwith an average value of", round(seasonal_mean, 2), "and a standard deviation of", round(seasonal_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible seasonal component.\n\n")
+  }
+  
+  remainder <- decomposed$random
+  if (!is.null(remainder)) {
+    remainder_mean <- mean(remainder, na.rm = TRUE)
+    remainder_sd <- sd(remainder, na.rm = TRUE)
+    cat("The remainder component suggests random fluctuations, \nwith an average value of", round(remainder_mean, 2), "and a standard deviation of", round(remainder_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible remainder component.\n\n")
+  }
+  
+  if (decomposed$type == "multiplicative") {
+    cat("The time series appears to be multiplicative.\n\n")
+  } else {
+    cat("The time series appears to be additive.\n\n")
+  }
+  
+  adf_test <- adf.test(ts_data)
+  cat("Augmented Dickey-Fuller Test Results:\n")
+  cat("Test Statistic:", adf_test$statistic, "\n")
+  cat("P-value:", adf_test$p.value, "\n")
+  cat("Critical Values:", adf_test$critical, "\n")
+  if (adf_test$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")}
+
+  adf_test_diff <- adf.test(diff_ts_data)
+  cat("Augmented Dickey-Fuller Test Results After Differencing:\n")
+  cat("Test Statistic:", adf_test_diff$statistic, "\n")
+  cat("P-value:", adf_test_diff$p.value, "\n")
+  cat("Critical Values:", adf_test_diff$critical, "\n")
+  if (adf_test_diff$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")
+  }
+  }
+```
+
+## 1-Year T-Bill Yield Minus Federal Funds Rate
+```{r fig.width=8, fig.height=4}
+df <- read_excel('data/data/sr_t-bill-rates.xlsx')
+df$observation_date <- as.Date(df$observation_date)
+columns <- c("T1YFF")
+for (col in columns) {
+  xts_data <- xts(df[, col], order.by = df$observation_date)
+  ts_data <- ts(df[, col], start=c(1982, 1, 4), frequency=252)
+  decomposed <- decompose(ts_data)
+  
+  plot(decomposed$x, main = paste("Original Time Series:", col), xlab = 'Date', ylab = 'Value')
+  plot(decomposed$trend, main = "Trend Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$seasonal, main = "Seasonal Component", xlab = 'Date', ylab = 'Value',ylim = c(-0.5,0.5))
+  plot(decomposed$random, main = "Remainder Component", xlab = 'Date', ylab = 'Value')
+  lag.plot(ts_data, lags=1, do.lines=FALSE, main="Lag Plot")
+  acf_data <- acf(ts_data, main=paste("ACF Plot:", col))
+  dacf_data <- pacf(ts_data, main=paste("PACF Plot:", col))
+  diff_ts_data <- diff(ts_data)
+  acf(diff_ts_data, main=paste("ACF After Differencing:", col))
+  pacf(diff_ts_data, main=paste("PACF After Differencing:", col))
+  }
+
+for (col in columns) {
+  
+  trend <- decomposed$trend
+  if (!is.null(trend)) {
+    trend_mean <- mean(trend, na.rm = TRUE)
+    trend_sd <- sd(trend, na.rm = TRUE)
+    trend_trend <- ifelse(trend_mean > 0, "increasing", "decreasing")
+    cat("The trend component suggests a", trend_trend, "trend, \nwith an average value of", round(trend_mean, 2), "and a standard deviation of", round(trend_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible trend component.\n\n")
+  }
+  
+  seasonal <- decomposed$seasonal
+  if (!is.null(seasonal)) {
+    seasonal_mean <- mean(seasonal, na.rm = TRUE)
+    seasonal_sd <- sd(seasonal, na.rm = TRUE)
+    cat("The seasonal component suggests a repeating pattern, \nwith an average value of", round(seasonal_mean, 2), "and a standard deviation of", round(seasonal_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible seasonal component.\n\n")
+  }
+  
+  remainder <- decomposed$random
+  if (!is.null(remainder)) {
+    remainder_mean <- mean(remainder, na.rm = TRUE)
+    remainder_sd <- sd(remainder, na.rm = TRUE)
+    cat("The remainder component suggests random fluctuations, \nwith an average value of", round(remainder_mean, 2), "and a standard deviation of", round(remainder_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible remainder component.\n\n")
+  }
+  
+  if (decomposed$type == "multiplicative") {
+    cat("The time series appears to be multiplicative.\n\n")
+  } else {
+    cat("The time series appears to be additive.\n\n")
+  }
+  
+  adf_test <- adf.test(ts_data)
+  cat("Augmented Dickey-Fuller Test Results:\n")
+  cat("Test Statistic:", adf_test$statistic, "\n")
+  cat("P-value:", adf_test$p.value, "\n")
+  cat("Critical Values:", adf_test$critical, "\n")
+  if (adf_test$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")}
+
+  adf_test_diff <- adf.test(diff_ts_data)
+  cat("Augmented Dickey-Fuller Test Results After Differencing:\n")
+  cat("Test Statistic:", adf_test_diff$statistic, "\n")
+  cat("P-value:", adf_test_diff$p.value, "\n")
+  cat("Critical Values:", adf_test_diff$critical, "\n")
+  if (adf_test_diff$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")
+  }
+  }
+```
+
+:::
+
+## Market Yield on U.S. Treasury Bonds Constant Maturity, Quoted on an Investment Basis
+
+::: {.panel-tabset}
+
+```{r}
+df <- read_excel('data/data/t-bill-vs-econ-index.xlsx',col_types = c("date","numeric","numeric","numeric","numeric","numeric","numeric","numeric","numeric","numeric"))
+df$observation_date <- as.Date(df$observation_date)
+selected_columns <- c("DGS10", "DGS20", "DGS30", "MORTGAGE30", "CPI", "FEDFUNDS", "USDIDX", "GDP", "UER")
+df <- df[!apply(is.na(df[selected_columns]) | df[selected_columns] == "", 1, all), ]
+```
+
+## Market Yield on 10-Year U.S. Treasury Bonds
+
+```{r fig.width=8, fig.height=4}
+columns <- c("DGS10")
+df_10 <- df[!is.na(df[columns]) & df[columns] != "", ]
+
+for (col in columns) {
+  xts_data <- xts(df_10[, col], order.by = df_10$observation_date)
+  ts_data <- ts(df_10[, col], start=c(1962, 1, 2), frequency=252)
+  decomposed <- decompose(ts_data)
+  
+  plot(decomposed$x, main = paste("Original Time Series:", col), xlab = 'Date', ylab = 'Value')
+  plot(decomposed$trend, main = "Trend Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$seasonal, main = "Seasonal Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$random, main = "Remainder Component", xlab = 'Date', ylab = 'Value')
+  lag.plot(ts_data, lags=1, do.lines=FALSE, main="Lag Plot")
+  acf_data <- acf(ts_data, main=paste("ACF Plot:", col))
+  dacf_data <- pacf(ts_data, main=paste("PACF Plot:", col))
+  diff_ts_data <- diff(ts_data)
+  acf(diff_ts_data, main=paste("ACF After Differencing:", col))
+  pacf(diff_ts_data, main=paste("PACF After Differencing:", col))
+  }
+
+for (col in columns) {
+  trend <- decomposed$trend
+  if (!is.null(trend)) {
+    trend_mean <- mean(trend, na.rm = TRUE)
+    trend_sd <- sd(trend, na.rm = TRUE)
+    trend_trend <- ifelse(trend_mean > 0, "increasing", "decreasing")
+    cat("The trend component suggests a", trend_trend, "trend, \nwith an average value of", round(trend_mean, 2), "and a standard deviation of", round(trend_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible trend component.\n\n")
+  }
+  
+  seasonal <- decomposed$seasonal
+  if (!is.null(seasonal)) {
+    seasonal_mean <- mean(seasonal, na.rm = TRUE)
+    seasonal_sd <- sd(seasonal, na.rm = TRUE)
+    cat("The seasonal component suggests a repeating pattern, \nwith an average value of", round(seasonal_mean, 2), "and a standard deviation of", round(seasonal_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible seasonal component.\n\n")
+  }
+  
+  remainder <- decomposed$random
+  if (!is.null(remainder)) {
+    remainder_mean <- mean(remainder, na.rm = TRUE)
+    remainder_sd <- sd(remainder, na.rm = TRUE)
+    cat("The remainder component suggests random fluctuations, \nwith an average value of", round(remainder_mean, 2), "and a standard deviation of", round(remainder_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible remainder component.\n\n")
+  }
+  
+  if (decomposed$type == "multiplicative") {
+    cat("The time series appears to be multiplicative.\n\n")
+  } else {
+    cat("The time series appears to be additive.\n\n")
+  }
+  
+  adf_test <- adf.test(ts_data)
+  cat("Augmented Dickey-Fuller Test Results:\n")
+  cat("Test Statistic:", adf_test$statistic, "\n")
+  cat("P-value:", adf_test$p.value, "\n")
+  cat("Critical Values:", adf_test$critical, "\n")
+  if (adf_test$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")}
+
+  adf_test_diff <- adf.test(diff_ts_data)
+  cat("Augmented Dickey-Fuller Test Results After Differencing:\n")
+  cat("Test Statistic:", adf_test_diff$statistic, "\n")
+  cat("P-value:", adf_test_diff$p.value, "\n")
+  cat("Critical Values:", adf_test_diff$critical, "\n")
+  if (adf_test_diff$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")
+  }
+  }
+```
+
+## Market Yield on 20-Year U.S. Treasury Bonds
+
+```{r fig.width=8, fig.height=4}
+columns <- c("DGS20")
+df_20 <- df[!is.na(df[columns]) & df[columns] != "", ]
+
+for (col in columns) {
+  xts_data <- xts(df_20[, col], order.by = df_20$observation_date)
+  ts_data <- ts(df_20[, col], start=c(1962, 1, 2), frequency=252)
+  decomposed <- decompose(ts_data)
+  
+  plot(decomposed$x, main = paste("Original Time Series:", col), xlab = 'Date', ylab = 'Value')
+  plot(decomposed$trend, main = "Trend Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$seasonal, main = "Seasonal Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$random, main = "Remainder Component", xlab = 'Date', ylab = 'Value')
+  lag.plot(ts_data, lags=1, do.lines=FALSE, main="Lag Plot")
+  acf_data <- acf(ts_data, main=paste("ACF Plot:", col))
+  dacf_data <- pacf(ts_data, main=paste("PACF Plot:", col))
+  diff_ts_data <- diff(ts_data)
+  acf(diff_ts_data, main=paste("ACF After Differencing:", col))
+  pacf(diff_ts_data, main=paste("PACF After Differencing:", col))
+  }
+
+for (col in columns) {
+  trend <- decomposed$trend
+  if (!is.null(trend)) {
+    trend_mean <- mean(trend, na.rm = TRUE)
+    trend_sd <- sd(trend, na.rm = TRUE)
+    trend_trend <- ifelse(trend_mean > 0, "increasing", "decreasing")
+    cat("The trend component suggests a", trend_trend, "trend, \nwith an average value of", round(trend_mean, 2), "and a standard deviation of", round(trend_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible trend component.\n\n")
+  }
+  
+  seasonal <- decomposed$seasonal
+  if (!is.null(seasonal)) {
+    seasonal_mean <- mean(seasonal, na.rm = TRUE)
+    seasonal_sd <- sd(seasonal, na.rm = TRUE)
+    cat("The seasonal component suggests a repeating pattern, \nwith an average value of", round(seasonal_mean, 2), "and a standard deviation of", round(seasonal_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible seasonal component.\n\n")
+  }
+  
+  remainder <- decomposed$random
+  if (!is.null(remainder)) {
+    remainder_mean <- mean(remainder, na.rm = TRUE)
+    remainder_sd <- sd(remainder, na.rm = TRUE)
+    cat("The remainder component suggests random fluctuations, \nwith an average value of", round(remainder_mean, 2), "and a standard deviation of", round(remainder_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible remainder component.\n\n")
+  }
+  
+  if (decomposed$type == "multiplicative") {
+    cat("The time series appears to be multiplicative.\n\n")
+  } else {
+    cat("The time series appears to be additive.\n\n")
+  }
+  
+  adf_test <- adf.test(ts_data)
+  cat("Augmented Dickey-Fuller Test Results:\n")
+  cat("Test Statistic:", adf_test$statistic, "\n")
+  cat("P-value:", adf_test$p.value, "\n")
+  cat("Critical Values:", adf_test$critical, "\n")
+  if (adf_test$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")}
+
+  adf_test_diff <- adf.test(diff_ts_data)
+  cat("Augmented Dickey-Fuller Test Results After Differencing:\n")
+  cat("Test Statistic:", adf_test_diff$statistic, "\n")
+  cat("P-value:", adf_test_diff$p.value, "\n")
+  cat("Critical Values:", adf_test_diff$critical, "\n")
+  if (adf_test_diff$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")
+  }
+  }
+```
+
+## Market Yield on 30-Year U.S. Treasury Bonds
+
+```{r fig.width=8, fig.height=4}
+columns <- c("DGS30")
+df_30 <- df[!is.na(df[columns]) & df[columns] != "", ]
+
+for (col in columns) {
+  xts_data <- xts(df_30[, col], order.by = df_30$observation_date)
+  ts_data <- ts(df_30[, col], start=c(1977, 2, 15), frequency=252)
+  decomposed <- decompose(ts_data)
+  
+  plot(decomposed$x, main = paste("Original Time Series:", col), xlab = 'Date', ylab = 'Value')
+  plot(decomposed$trend, main = "Trend Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$seasonal, main = "Seasonal Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$random, main = "Remainder Component", xlab = 'Date', ylab = 'Value')
+  lag.plot(ts_data, lags=1, do.lines=FALSE, main="Lag Plot")
+  acf_data <- acf(ts_data, main=paste("ACF Plot:", col))
+  dacf_data <- pacf(ts_data, main=paste("PACF Plot:", col))
+  diff_ts_data <- diff(ts_data)
+  acf(diff_ts_data, main=paste("ACF After Differencing:", col))
+  pacf(diff_ts_data, main=paste("PACF After Differencing:", col))
+  }
+
+for (col in columns) {
+  trend <- decomposed$trend
+  if (!is.null(trend)) {
+    trend_mean <- mean(trend, na.rm = TRUE)
+    trend_sd <- sd(trend, na.rm = TRUE)
+    trend_trend <- ifelse(trend_mean > 0, "increasing", "decreasing")
+    cat("The trend component suggests a", trend_trend, "trend, \nwith an average value of", round(trend_mean, 2), "and a standard deviation of", round(trend_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible trend component.\n\n")
+  }
+  
+  seasonal <- decomposed$seasonal
+  if (!is.null(seasonal)) {
+    seasonal_mean <- mean(seasonal, na.rm = TRUE)
+    seasonal_sd <- sd(seasonal, na.rm = TRUE)
+    cat("The seasonal component suggests a repeating pattern, \nwith an average value of", round(seasonal_mean, 2), "and a standard deviation of", round(seasonal_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible seasonal component.\n\n")
+  }
+  
+  remainder <- decomposed$random
+  if (!is.null(remainder)) {
+    remainder_mean <- mean(remainder, na.rm = TRUE)
+    remainder_sd <- sd(remainder, na.rm = TRUE)
+    cat("The remainder component suggests random fluctuations, \nwith an average value of", round(remainder_mean, 2), "and a standard deviation of", round(remainder_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible remainder component.\n\n")
+  }
+  
+  if (decomposed$type == "multiplicative") {
+    cat("The time series appears to be multiplicative.\n\n")
+  } else {
+    cat("The time series appears to be additive.\n\n")
+  }
+  
+  adf_test <- adf.test(ts_data)
+  cat("Augmented Dickey-Fuller Test Results:\n")
+  cat("Test Statistic:", adf_test$statistic, "\n")
+  cat("P-value:", adf_test$p.value, "\n")
+  cat("Critical Values:", adf_test$critical, "\n")
+  if (adf_test$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")}
+
+  adf_test_diff <- adf.test(diff_ts_data)
+  cat("Augmented Dickey-Fuller Test Results After Differencing:\n")
+  cat("Test Statistic:", adf_test_diff$statistic, "\n")
+  cat("P-value:", adf_test_diff$p.value, "\n")
+  cat("Critical Values:", adf_test_diff$critical, "\n")
+  if (adf_test_diff$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")
+  }
+  }
+```
+
+:::
+
+## Economic Indicators
+
+::: {.panel-tabset}
+
+## Fed Funds Rate
+
+```{r fig.width=8, fig.height=4}
+columns <- c("FEDFUNDS")
+df_ffr <- df[!is.na(df[columns]) & df[columns] != "", ]
+for (col in columns) {
+  xts_data <- xts(df_ffr[, col], order.by = df_ffr$observation_date)
+  ts_data <- ts(df_ffr[, col], start=c(1962, 2, 1), frequency=12)
+  decomposed <- decompose(ts_data)
+  
+  plot(decomposed$x, main = paste("Original Time Series:", col), xlab = 'Date', ylab = 'Value')
+  plot(decomposed$trend, main = "Trend Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$seasonal, main = "Seasonal Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$random, main = "Remainder Component", xlab = 'Date', ylab = 'Value')
+  lag.plot(ts_data, lags=1, do.lines=FALSE, main="Lag Plot")
+  acf_data <- acf(ts_data, main=paste("ACF Plot:", col))
+  dacf_data <- pacf(ts_data, main=paste("PACF Plot:", col))
+  diff_ts_data <- diff(ts_data)
+  acf(diff_ts_data, main=paste("ACF After Differencing:", col))
+  pacf(diff_ts_data, main=paste("PACF After Differencing:", col))
+  }
+
+for (col in columns) {
+  trend <- decomposed$trend
+  if (!is.null(trend)) {
+    trend_mean <- mean(trend, na.rm = TRUE)
+    trend_sd <- sd(trend, na.rm = TRUE)
+    trend_trend <- ifelse(trend_mean > 0, "increasing", "decreasing")
+    cat("The trend component suggests a", trend_trend, "trend, \nwith an average value of", round(trend_mean, 2), "and a standard deviation of", round(trend_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible trend component.\n\n")
+  }
+  
+  seasonal <- decomposed$seasonal
+  if (!is.null(seasonal)) {
+    seasonal_mean <- mean(seasonal, na.rm = TRUE)
+    seasonal_sd <- sd(seasonal, na.rm = TRUE)
+    cat("The seasonal component suggests a repeating pattern, \nwith an average value of", round(seasonal_mean, 2), "and a standard deviation of", round(seasonal_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible seasonal component.\n\n")
+  }
+  
+  remainder <- decomposed$random
+  if (!is.null(remainder)) {
+    remainder_mean <- mean(remainder, na.rm = TRUE)
+    remainder_sd <- sd(remainder, na.rm = TRUE)
+    cat("The remainder component suggests random fluctuations, \nwith an average value of", round(remainder_mean, 2), "and a standard deviation of", round(remainder_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible remainder component.\n\n")
+  }
+  
+  if (decomposed$type == "multiplicative") {
+    cat("The time series appears to be multiplicative.\n\n")
+  } else {
+    cat("The time series appears to be additive.\n\n")
+  }
+  
+  adf_test <- adf.test(ts_data)
+  cat("Augmented Dickey-Fuller Test Results:\n")
+  cat("Test Statistic:", adf_test$statistic, "\n")
+  cat("P-value:", adf_test$p.value, "\n")
+  cat("Critical Values:", adf_test$critical, "\n")
+  if (adf_test$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")}
+
+  adf_test_diff <- adf.test(diff_ts_data)
+  cat("Augmented Dickey-Fuller Test Results After Differencing:\n")
+  cat("Test Statistic:", adf_test_diff$statistic, "\n")
+  cat("P-value:", adf_test_diff$p.value, "\n")
+  cat("Critical Values:", adf_test_diff$critical, "\n")
+  if (adf_test_diff$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")
+  }
+  }
+```
+
+## 30-Year Mortgage Rate
+
+```{r fig.width=8, fig.height=4}
+columns <- c("MORTGAGE30")
+df_mort <- df[!is.na(df[columns]) & df[columns] != "", ]
+for (col in columns) {
+  xts_data <- xts(df_mort[, col], order.by = df_mort$observation_date)
+  ts_data <- ts(df_mort[, col], start=c(1971, 4, 2), frequency=52)
+  decomposed <- decompose(ts_data)
+  
+  plot(decomposed$x, main = paste("Original Time Series:", col), xlab = 'Date', ylab = 'Value')
+  plot(decomposed$trend, main = "Trend Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$seasonal, main = "Seasonal Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$random, main = "Remainder Component", xlab = 'Date', ylab = 'Value')
+  lag.plot(ts_data, lags=1, do.lines=FALSE, main="Lag Plot")
+  acf_data <- acf(ts_data, main=paste("ACF Plot:", col))
+  dacf_data <- pacf(ts_data, main=paste("PACF Plot:", col))
+  diff_ts_data <- diff(ts_data)
+  acf(diff_ts_data, main=paste("ACF After Differencing:", col))
+  pacf(diff_ts_data, main=paste("PACF After Differencing:", col))
+  }
+
+for (col in columns) {
+  trend <- decomposed$trend
+  if (!is.null(trend)) {
+    trend_mean <- mean(trend, na.rm = TRUE)
+    trend_sd <- sd(trend, na.rm = TRUE)
+    trend_trend <- ifelse(trend_mean > 0, "increasing", "decreasing")
+    cat("The trend component suggests a", trend_trend, "trend, \nwith an average value of", round(trend_mean, 2), "and a standard deviation of", round(trend_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible trend component.\n\n")
+  }
+  
+  seasonal <- decomposed$seasonal
+  if (!is.null(seasonal)) {
+    seasonal_mean <- mean(seasonal, na.rm = TRUE)
+    seasonal_sd <- sd(seasonal, na.rm = TRUE)
+    cat("The seasonal component suggests a repeating pattern, \nwith an average value of", round(seasonal_mean, 2), "and a standard deviation of", round(seasonal_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible seasonal component.\n\n")
+  }
+  
+  remainder <- decomposed$random
+  if (!is.null(remainder)) {
+    remainder_mean <- mean(remainder, na.rm = TRUE)
+    remainder_sd <- sd(remainder, na.rm = TRUE)
+    cat("The remainder component suggests random fluctuations, \nwith an average value of", round(remainder_mean, 2), "and a standard deviation of", round(remainder_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible remainder component.\n\n")
+  }
+  
+  if (decomposed$type == "multiplicative") {
+    cat("The time series appears to be multiplicative.\n\n")
+  } else {
+    cat("The time series appears to be additive.\n\n")
+  }
+  
+  adf_test <- adf.test(ts_data)
+  cat("Augmented Dickey-Fuller Test Results:\n")
+  cat("Test Statistic:", adf_test$statistic, "\n")
+  cat("P-value:", adf_test$p.value, "\n")
+  cat("Critical Values:", adf_test$critical, "\n")
+  if (adf_test$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")}
+
+  adf_test_diff <- adf.test(diff_ts_data)
+  cat("Augmented Dickey-Fuller Test Results After Differencing:\n")
+  cat("Test Statistic:", adf_test_diff$statistic, "\n")
+  cat("P-value:", adf_test_diff$p.value, "\n")
+  cat("Critical Values:", adf_test_diff$critical, "\n")
+  if (adf_test_diff$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")
+  }
+  }
+```
+
+## Comsumer Price Index
+
+```{r fig.width=8, fig.height=4}
+columns <- c("CPI")
+df_cpi <- df[!is.na(df[columns]) & df[columns] != "", ]
+for (col in columns) {
+  xts_data <- xts(df_cpi[, col], order.by = df_cpi$observation_date)
+  ts_data <- ts(df_cpi[, col], start=c(1962, 2, 1), frequency=12)
+  decomposed <- decompose(ts_data)
+  
+  plot(decomposed$x, main = paste("Original Time Series:", col), xlab = 'Date', ylab = 'Value')
+  plot(decomposed$trend, main = "Trend Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$seasonal, main = "Seasonal Component", xlab = 'Date', ylab = 'Value',ylim = c(-0.5,0.5))
+  plot(decomposed$random, main = "Remainder Component", xlab = 'Date', ylab = 'Value')
+  lag.plot(ts_data, lags=1, do.lines=FALSE, main="Lag Plot")
+  acf_data <- acf(ts_data, main=paste("ACF Plot:", col))
+  dacf_data <- pacf(ts_data, main=paste("PACF Plot:", col))
+  diff_ts_data <- diff(ts_data)
+  acf(diff_ts_data, main=paste("ACF After Differencing:", col))
+  pacf(diff_ts_data, main=paste("PACF After Differencing:", col))
+  }
+
+for (col in columns) {
+  trend <- decomposed$trend
+  if (!is.null(trend)) {
+    trend_mean <- mean(trend, na.rm = TRUE)
+    trend_sd <- sd(trend, na.rm = TRUE)
+    trend_trend <- ifelse(trend_mean > 0, "increasing", "decreasing")
+    cat("The trend component suggests a", trend_trend, "trend, \nwith an average value of", round(trend_mean, 2), "and a standard deviation of", round(trend_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible trend component.\n\n")
+  }
+  
+  seasonal <- decomposed$seasonal
+  if (!is.null(seasonal)) {
+    seasonal_mean <- mean(seasonal, na.rm = TRUE)
+    seasonal_sd <- sd(seasonal, na.rm = TRUE)
+    cat("The seasonal component suggests a repeating pattern, \nwith an average value of", round(seasonal_mean, 2), "and a standard deviation of", round(seasonal_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible seasonal component.\n\n")
+  }
+  
+  remainder <- decomposed$random
+  if (!is.null(remainder)) {
+    remainder_mean <- mean(remainder, na.rm = TRUE)
+    remainder_sd <- sd(remainder, na.rm = TRUE)
+    cat("The remainder component suggests random fluctuations, \nwith an average value of", round(remainder_mean, 2), "and a standard deviation of", round(remainder_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible remainder component.\n\n")
+  }
+  
+  if (decomposed$type == "multiplicative") {
+    cat("The time series appears to be multiplicative.\n\n")
+  } else {
+    cat("The time series appears to be additive.\n\n")
+  }
+  
+  adf_test <- adf.test(ts_data)
+  cat("Augmented Dickey-Fuller Test Results:\n")
+  cat("Test Statistic:", adf_test$statistic, "\n")
+  cat("P-value:", adf_test$p.value, "\n")
+  cat("Critical Values:", adf_test$critical, "\n")
+  if (adf_test$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")}
+
+  adf_test_diff <- adf.test(diff_ts_data)
+  cat("Augmented Dickey-Fuller Test Results After Differencing:\n")
+  cat("Test Statistic:", adf_test_diff$statistic, "\n")
+  cat("P-value:", adf_test_diff$p.value, "\n")
+  cat("Critical Values:", adf_test_diff$critical, "\n")
+  if (adf_test_diff$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")
+  }
+  }
+```
+
+## GDP
+
+```{r fig.width=8, fig.height=4}
+columns <- c("GDP")
+df_gdp <- df[!is.na(df[columns]) & df[columns] != "", ]
+for (col in columns) {
+  xts_data <- xts(df_gdp[, col], order.by = df_gdp$observation_date)
+  ts_data <- ts(df_gdp[, col], start=c(1962, 10, 1), frequency=4)
+  decomposed <- decompose(ts_data)
+  
+  plot(decomposed$x, main = paste("Original Time Series:", col), xlab = 'Date', ylab = 'Value')
+  plot(decomposed$trend, main = "Trend Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$seasonal, main = "Seasonal Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$random, main = "Remainder Component", xlab = 'Date', ylab = 'Value')
+  lag.plot(ts_data, lags=1, do.lines=FALSE, main="Lag Plot")
+  acf_data <- acf(ts_data, main=paste("ACF Plot:", col))
+  dacf_data <- pacf(ts_data, main=paste("PACF Plot:", col))
+  diff_ts_data <- diff(ts_data)
+  acf(diff_ts_data, main=paste("ACF After Differencing:", col))
+  pacf(diff_ts_data, main=paste("PACF After Differencing:", col))
+  }
+
+for (col in columns) {
+  trend <- decomposed$trend
+  if (!is.null(trend)) {
+    trend_mean <- mean(trend, na.rm = TRUE)
+    trend_sd <- sd(trend, na.rm = TRUE)
+    trend_trend <- ifelse(trend_mean > 0, "increasing", "decreasing")
+    cat("The trend component suggests a", trend_trend, "trend, \nwith an average value of", round(trend_mean, 2), "and a standard deviation of", round(trend_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible trend component.\n\n")
+  }
+  
+  seasonal <- decomposed$seasonal
+  if (!is.null(seasonal)) {
+    seasonal_mean <- mean(seasonal, na.rm = TRUE)
+    seasonal_sd <- sd(seasonal, na.rm = TRUE)
+    cat("The seasonal component suggests a repeating pattern, \nwith an average value of", round(seasonal_mean, 2), "and a standard deviation of", round(seasonal_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible seasonal component.\n\n")
+  }
+  
+  remainder <- decomposed$random
+  if (!is.null(remainder)) {
+    remainder_mean <- mean(remainder, na.rm = TRUE)
+    remainder_sd <- sd(remainder, na.rm = TRUE)
+    cat("The remainder component suggests random fluctuations, \nwith an average value of", round(remainder_mean, 2), "and a standard deviation of", round(remainder_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible remainder component.\n\n")
+  }
+  
+  if (decomposed$type == "multiplicative") {
+    cat("The time series appears to be multiplicative.\n\n")
+  } else {
+    cat("The time series appears to be additive.\n\n")
+  }
+  
+  adf_test <- adf.test(ts_data)
+  cat("Augmented Dickey-Fuller Test Results:\n")
+  cat("Test Statistic:", adf_test$statistic, "\n")
+  cat("P-value:", adf_test$p.value, "\n")
+  cat("Critical Values:", adf_test$critical, "\n")
+  if (adf_test$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")}
+
+  adf_test_diff <- adf.test(diff_ts_data)
+  cat("Augmented Dickey-Fuller Test Results After Differencing:\n")
+  cat("Test Statistic:", adf_test_diff$statistic, "\n")
+  cat("P-value:", adf_test_diff$p.value, "\n")
+  cat("Critical Values:", adf_test_diff$critical, "\n")
+  if (adf_test_diff$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")
+  }
+  }
+```
+## Unemployment Rate
+
+```{r fig.width=8, fig.height=4}
+columns <- c("UER")
+df_uemp <- df[!is.na(df[columns]) & df[columns] != "", ]
+for (col in columns) {
+  xts_data <- xts(df_uemp[, col], order.by = df_uemp$observation_date)
+  ts_data <- ts(df_uemp[, col], start=c(1962, 2, 1), frequency=12)
+  decomposed <- decompose(ts_data)
+  
+  plot(decomposed$x, main = paste("Original Time Series:", col), xlab = 'Date', ylab = 'Value')
+  plot(decomposed$trend, main = "Trend Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$seasonal, main = "Seasonal Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$random, main = "Remainder Component", xlab = 'Date', ylab = 'Value')
+  lag.plot(ts_data, lags=1, do.lines=FALSE, main="Lag Plot")
+  acf_data <- acf(ts_data, main=paste("ACF Plot:", col))
+  dacf_data <- pacf(ts_data, main=paste("PACF Plot:", col))
+  diff_ts_data <- diff(ts_data)
+  acf(diff_ts_data, main=paste("ACF After Differencing:", col))
+  pacf(diff_ts_data, main=paste("PACF After Differencing:", col))
+  }
+
+for (col in columns) {
+  trend <- decomposed$trend
+  if (!is.null(trend)) {
+    trend_mean <- mean(trend, na.rm = TRUE)
+    trend_sd <- sd(trend, na.rm = TRUE)
+    trend_trend <- ifelse(trend_mean > 0, "increasing", "decreasing")
+    cat("The trend component suggests a", trend_trend, "trend, \nwith an average value of", round(trend_mean, 2), "and a standard deviation of", round(trend_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible trend component.\n\n")
+  }
+  
+  seasonal <- decomposed$seasonal
+  if (!is.null(seasonal)) {
+    seasonal_mean <- mean(seasonal, na.rm = TRUE)
+    seasonal_sd <- sd(seasonal, na.rm = TRUE)
+    cat("The seasonal component suggests a repeating pattern, \nwith an average value of", round(seasonal_mean, 2), "and a standard deviation of", round(seasonal_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible seasonal component.\n\n")
+  }
+  
+  remainder <- decomposed$random
+  if (!is.null(remainder)) {
+    remainder_mean <- mean(remainder, na.rm = TRUE)
+    remainder_sd <- sd(remainder, na.rm = TRUE)
+    cat("The remainder component suggests random fluctuations, \nwith an average value of", round(remainder_mean, 2), "and a standard deviation of", round(remainder_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible remainder component.\n\n")
+  }
+  
+  if (decomposed$type == "multiplicative") {
+    cat("The time series appears to be multiplicative.\n\n")
+  } else {
+    cat("The time series appears to be additive.\n\n")
+  }
+  
+  adf_test <- adf.test(ts_data)
+  cat("Augmented Dickey-Fuller Test Results:\n")
+  cat("Test Statistic:", adf_test$statistic, "\n")
+  cat("P-value:", adf_test$p.value, "\n")
+  cat("Critical Values:", adf_test$critical, "\n")
+  if (adf_test$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")}
+
+  adf_test_diff <- adf.test(diff_ts_data)
+  cat("Augmented Dickey-Fuller Test Results After Differencing:\n")
+  cat("Test Statistic:", adf_test_diff$statistic, "\n")
+  cat("P-value:", adf_test_diff$p.value, "\n")
+  cat("Critical Values:", adf_test_diff$critical, "\n")
+  if (adf_test_diff$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")
+  }
+  }
+```
+
+## USD Index
+
+```{r fig.width=8, fig.height=4}
+columns <- c("USDIDX")
+df_usd <- df[!is.na(df[columns]) & df[columns] != "", ]
+for (col in columns) {
+  xts_data <- xts(df_usd[, col], order.by = df_usd$observation_date)
+  ts_data <- ts(df_usd[, col], start=c(2018, 9, 17), frequency=365)
+  decomposed <- decompose(ts_data)
+  
+  plot(decomposed$x, main = paste("Original Time Series:", col), xlab = 'Date', ylab = 'Value')
+  plot(decomposed$trend, main = "Trend Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$seasonal, main = "Seasonal Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$random, main = "Remainder Component", xlab = 'Date', ylab = 'Value')
+  lag.plot(ts_data, lags=1, do.lines=FALSE, main="Lag Plot")
+  acf_data <- acf(ts_data, main=paste("ACF Plot:", col))
+  dacf_data <- pacf(ts_data, main=paste("PACF Plot:", col))
+  diff_ts_data <- diff(ts_data)
+  acf(diff_ts_data, main=paste("ACF After Differencing:", col))
+  pacf(diff_ts_data, main=paste("PACF After Differencing:", col))
+  }
+
+for (col in columns) {
+  trend <- decomposed$trend
+  if (!is.null(trend)) {
+    trend_mean <- mean(trend, na.rm = TRUE)
+    trend_sd <- sd(trend, na.rm = TRUE)
+    trend_trend <- ifelse(trend_mean > 0, "increasing", "decreasing")
+    cat("The trend component suggests a", trend_trend, "trend, \nwith an average value of", round(trend_mean, 2), "and a standard deviation of", round(trend_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible trend component.\n\n")
+  }
+  
+  seasonal <- decomposed$seasonal
+  if (!is.null(seasonal)) {
+    seasonal_mean <- mean(seasonal, na.rm = TRUE)
+    seasonal_sd <- sd(seasonal, na.rm = TRUE)
+    cat("The seasonal component suggests a repeating pattern, \nwith an average value of", round(seasonal_mean, 2), "and a standard deviation of", round(seasonal_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible seasonal component.\n\n")
+  }
+  
+  remainder <- decomposed$random
+  if (!is.null(remainder)) {
+    remainder_mean <- mean(remainder, na.rm = TRUE)
+    remainder_sd <- sd(remainder, na.rm = TRUE)
+    cat("The remainder component suggests random fluctuations, \nwith an average value of", round(remainder_mean, 2), "and a standard deviation of", round(remainder_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible remainder component.\n\n")
+  }
+  
+  if (decomposed$type == "multiplicative") {
+    cat("The time series appears to be multiplicative.\n\n")
+  } else {
+    cat("The time series appears to be additive.\n\n")
+  }
+  
+  adf_test <- adf.test(ts_data)
+  cat("Augmented Dickey-Fuller Test Results:\n")
+  cat("Test Statistic:", adf_test$statistic, "\n")
+  cat("P-value:", adf_test$p.value, "\n")
+  cat("Critical Values:", adf_test$critical, "\n")
+  if (adf_test$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")}
+
+  adf_test_diff <- adf.test(diff_ts_data)
+  cat("Augmented Dickey-Fuller Test Results After Differencing:\n")
+  cat("Test Statistic:", adf_test_diff$statistic, "\n")
+  cat("P-value:", adf_test_diff$p.value, "\n")
+  cat("Critical Values:", adf_test_diff$critical, "\n")
+  if (adf_test_diff$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")
+  }
+  }
+```
+
+:::
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

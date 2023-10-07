@@ -1,0 +1,79 @@
+---
+title: "Introduction"
+subtitle: "Central Bank, Interest Rates, and the Economy"
+format: 
+  html:
+    toc: true
+    code-fold: true
+    code-tools: true
+    embed-resources: true
+    mermaid:
+      theme: neutral
+bibliography: citation.bib
+execute: 
+  echo: true
+---
+![](data/plot/fed.jpg)
+
+<div style="margin-bottom: 15px;"></div>
+
+### Statement of Purpose
+
+This project seeks to investigate the potential effects of fluctuations in the Fed Funds Rate on various sectors of the economy. Specifically, it aims to analyze the impact on key sectors such as the bond market, stock market, exchange rates, inflation rates, and unemployment rates. By examining these relationships, we can gain valuable insights into the broader economic dynamics influenced by changes in the Fed Funds Rate.
+
+### Central Bank
+
+The Central Bank, widely acknowledged as a preeminent authority in the financial sector, exercises profound influence over the economy. In an era of global interconnectivity, even minute actions by central banks can reverberate across distant economies. Therefore, it is imperative to examine their roles, tools, and execution. Well-known central banks include **The Federal Reserve System (the Fed)**, the Bank of England, the European Central Bank (ECB). 
+
+### Interest Rate
+
+Interest rates are central banks' potent tools that play a significant role in the domestic and global economy. As depicted in the flow chart, when interest rates are raised, it leads to a short-term reduction in consumption, investment, government spending, and net exports, resulting in GDP contraction. However, in the long term, it tends to curb inflation. Conversely, when interest rates are lowered, the opposite effect occurs, stimulating economic activity. This illustrates how central banks manipulate interest rates to influence economic conditions.
+
+### Gross Domestic Product
+
+$GDP = Consumption + Investment + Government\ Spending + Net\ Exports$
+
+```{mermaid}
+flowchart LR
+A(Federdal Reserve) --> B(Interest Rate UP)
+B --> D(GDP DOWN)
+D --> E(Disinflation)
+A(Federdal Reserve) --> C(Interest Rate DOWN)
+C --> F(GDP UP)
+F --> G(Inflation)
+```
+
+### Risk-Free Rate
+
+Risk-Free Rate are interest rates devoid of external factors like inflation. **LIBOR** (London Interbank Offered Rate) and **U.S. Treasury Bond** Yield Curve are low-risk benchmarks, supported by strong economies.
+
+### T-Bill Yield Curve
+
+{{< video https://www.youtube.com/watch?v=7x8vIvwYzFg >}}
+
+Yield Curve plots yields of bonds with equal credit quality but different maturities, forecasting interest rate changes and economic trends.
+
+![](data/plot/t-bill-yield-curve.png)
+
+[Link](https://www.ustreasuryyieldcurve.com/)
+
+### Fed Funds Rate
+
+Fed Funds Rate represents the target interest rate range set by the Federal Open Market Committee (FOMC), influencing overnight lending among commercial banks.
+
+![](data/plot/fed-fund-rate.png)
+
+[Link](https://www.nytimes.com/live/2023/09/20/business/fed-meeting-interest-rates)
+
+### Summary
+
+The interest rate serves as a pivotal tool in the Federal Reserve's arsenal for regulating economic conditions. A key concept within this realm is the risk-free rate, which denotes an interest rate shielded from external risks and exposures. Typically, market participants turn to benchmarks such as LIBOR or the Treasury Bill (T-Bill) interest rate when seeking a risk-free rate, primarily due to their inherently low risk profile. Notably, the T-Bill rate is not a fixed figure prescribed by the Treasury Department; instead, it fluctuates in accordance with the prices of various T-Bills traded on the secondary market.
+
+However, a common query arises: If the market determines the risk-free rate, why do people frequently attribute changes in interest rates to actions taken by the Federal Reserve? The answer lies in the Federal Reserve's influence over the overnight interest rate, known as the Fed Funds Rate. This rate plays a significant role in the yield curve, particularly when examining the curve at a very short-term horizon (i.e., when x equals 0.0001). Consequently, when individuals refer to the Federal Reserve raising or lowering interest rates, they are typically alluding to the central bank's actions pertaining to the Fed Funds Rate.
+
+**This project is inspried by the work of Harvard Law Review "FEDERAL RESERVE — U.S. MONETARY POLICY SHOWS THE MAJOR ISSUES WITH THE MAJOR QUESTIONS DOCTRINE. — Federal Reserve Interest Rate Hike on March 22, 2023."**
+
+@hls
+
+
+

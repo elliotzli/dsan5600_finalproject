@@ -1,0 +1,47 @@
+## cd Desktop/Georgetown/gtown\ domain/dsan5600-project/
+
+project:
+  type: website
+
+website:
+  title: "Fed Funds Rate Impact Study"
+  sidebar:
+    style: "floating"
+    search: true
+    tools:
+      - icon: github
+        href: https://github.com/elliotzli/dsan5600-project
+      - icon: linkedin
+        href: https://www.linkedin.com/in/zhengze-li-90517b193/
+    contents:
+      - section: "Introduction, Data, and Visual Analysis "
+        contents:
+          - href: https://elliotzli.georgetown.domains
+            text: About Me - Main Page
+          - index.qmd
+          - datasource.qmd
+          - datavis.qmd
+          - eda.qmd
+      - text: "---"
+      - section: "Statistical Analysis"
+        contents:
+          - arma.qmd
+          - arimax.qmd
+          - saf.qmd
+          - fin-ts-model.qmd
+          - deeplearning.qmd
+      - text: "---"
+      - section: "Conclusion"
+        contents:
+          - conclusions.qmd
+
+format:
+  html:
+    theme: flatly
+    css: styles.css
+    toc: true
+    grid:
+      sidebar-width: 250px
+      body-width: 1050px
+      margin-width: 200px
+      gutter-width: 1.5rem

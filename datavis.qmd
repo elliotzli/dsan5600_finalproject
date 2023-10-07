@@ -1,0 +1,235 @@
+---
+title: "Data Visualization"
+subtitle: "Treasury Yield Movement and Its Relations to the Economy"
+format: 
+  html:
+    smooth-scroll: true
+    toc: true
+    code-fold: true
+    code-tools: true
+    embed-resources: true
+    mermaid:
+      theme: neutral
+bibliography: citation.bib
+execute: 
+  echo: true
+---
+## Short-Term Treasury Bill Movements and Federal Funds Rate Spreads
+
+The Treasury yield minus the Federal Funds Rate essentially reflects the spread or differential between the two, which can signal several economic conditions and expectations.
+
+1. Monetary Policy and Economic Cycles Insight:
+    i) Interest Rate Expectations: A larger spread between Treasury yields and the Federal Funds Rate could indicate that investors expect interest rates to rise in the future, possibly due to economic growth or inflation expectations.
+    ii) Economic Health: A narrowing spread might suggest that investors are seeking safe-haven assets, which could imply economic uncertainty or an impending recession.
+
+2. Risk and Investment Dynamics:
+    i) Risk Sentiment: A widening spread might indicate a risk-on environment where investors are favoring higher-yielding assets, whereas a narrowing spread might suggest risk-aversion.
+    ii) Investment Strategy: Differentials in Treasury yields can influence asset allocation and investment strategies, particularly in fixed-income portfolios.
+
+3. International Capital Flows:
+    i) Attractiveness to Foreign Investors: Larger spreads between U.S. Treasury yields and the Federal Funds Rate compared to foreign bond yields might attract international capital, influencing currency value and global fund flows.
+    ii) Global Comparative Advantage: Evaluate how the spreads compare with the interest rate differentials of other countries, which might impact international investment decisions.
+
+4. Inflation and Real Yield Perspectives:
+    i) Inflation Expectations: Higher Treasury yields (relative to the Federal Funds Rate) might be associated with higher future inflation expectations, as investors might demand higher nominal yields.
+    ii) Real Yields: Analyzing these spreads alongside inflation metrics allows for evaluating real yield dynamics and their implications for savers and investors.
+
+5. Fiscal and Monetary Policy Interactions:
+    i)Policy Efficiency: Understanding how fiscal policies (like government borrowing, reflected in Treasury yields) interact with monetary policy (indicated by the Federal Funds Rate) can provide insights into the overall policy environment and effectiveness.
+
+@tbill_ffr
+
+```{python}
+import plotly.graph_objects as go
+import plotly.io as pio
+import pandas as pd
+import warnings
+
+warnings.filterwarnings("ignore")
+pio.renderers.default = "plotly_mimetype+notebook_connected"
+df = pd.read_excel('data/data/sr_t-bill-rates.xlsx')
+df.ffill(inplace=True)
+fig = go.Figure()
+for col in df.columns[1:]:
+    fig.add_trace(go.Scatter(x=df['observation_date'], y=df[col], name=col, visible=True, line=dict(width=1)))
+buttons = [
+    dict(label='All',
+         method='update',
+         args=[{'visible': [True for col in df.columns[1:]]}]),
+    dict(label='None',
+         method='update',
+         args=[{'visible': [False for col in df.columns[1:]]}])
+]
+for col in df.columns[1:]:
+    buttons.append(
+        dict(label=col,
+             method='update',
+             args=[{'visible': [True if c == col else False for c in df.columns[1:]]}])
+    )
+fig.update_layout(
+    updatemenus=[
+        dict(
+            buttons=buttons,
+            direction="down",
+            active=0,
+            x=1.13,
+            y=0.68,
+        ),
+    ],
+    xaxis=dict(
+        rangeslider=dict(visible=True),
+        type="date"
+    ),
+    title_text="Treasury Bill Constant Maturity Minus Federal Funds Rate <br><sup>reflects the difference between various Treasury Bill yields and the Federal Funds Rate</sup> ",
+    xaxis_title="Date",
+    yaxis_title="Treasury Yield Rates",
+    width=900,
+    height=600,  
+    margin=dict(t=100),
+    plot_bgcolor='white',
+    yaxis_range=[-6,5]
+)
+fig.update_xaxes(gridcolor='lightgrey', griddash='dot')
+fig.update_yaxes(gridcolor='lightgrey', griddash='dot')
+
+note = 'Source:<a href="https://fred.stlouisfed.org/"">Federal Reserve Economic Data</a>'
+fig.add_annotation(
+    showarrow=False,
+    text=note,
+    font=dict(size=10), 
+    xref='x domain',
+    x=1.1,
+    yref='y domain',
+    y=-0.5
+    )
+fig.show()
+```
+
+- T3MFF: 3-Month Treasury Constant Maturity Minus Federal Funds Rate
+- T6MFF: 6-Month Treasury Constant Maturity Minus Federal Funds Rate
+- T1YFF: 1-Year Treasury Constant Maturity Minus Federal Funds Rate
+
+<br>
+The graph clearly shows a strong link between the 3-month, 6-month, and 1-year Treasury bill yield differences. Simply, the 3-month bill has the lowest rate, the 6-month bill is in the middle, and the 1-year bill shows the highest rate difference.
+
+Looking at the timeline, there's a noticeable bumpy ride from 1982 to 2000. When financial crises hit, like the Asian Financial Crisis in 1997, the Global Financial Crisis in 2008, and the onset of Covid-19 in 2020, the gap between the Treasury bill yields and the Federal Funds Rate (FFR) turns negative. This means the bill's yield is lower than the FFR. When the gap is positive, the situation reverses. Here’s why this happens:
+
+1. Investor Sentiment: In shaky economic times, investors often buy safe assets like Treasury bills, which raises their price but lowers their yield.
+
+2. Monetary Policy: If the FFR is higher than T-Bill rates, it might point to the Federal Reserve using a tight monetary policy.
+
+3. Economic Signs: In the past, when short-term rates dip below long-term rates or when the Treasury yield is less than the FFR, it has sometimes signaled a coming recession.
+
+4. Global Investment: During global economic ups and downs, investors from other countries might invest in US Treasury bills even if the yields are low.
+
+## Relationship Between Treasury Yields and Key Economic Indicators
+
+1. CPI (Inflation)
+    i) Risk Management: Unveils how inflation impacts the real yield, guiding investors towards strategies that safeguard purchasing power.
+    ii) Policy Insights: Illuminates possible central bank policy shifts in response to inflation, indirectly shaping bond markets.
+
+2. GDP
+    i) Economic Health Indicator: The relationship may signal the overall economic condition and its likely trajectory.
+    ii) Policy Prediction: Helps anticipate potential monetary policy responses to economic developments.
+
+3. Mortgage Rates
+    i) Housing Market Influence: Relationship analysis aids in forecasting mortgage rate trends, influencing real estate markets.
+    ii) Economic Impact Insight: Highlights broader economic outcomes since housing markets significantly impact the economy.
+
+4. Unemployment Rate
+    i) Economic Insight: Offers a glimpse into economic cycles through the lens of employment and bond yields.
+    ii) Predictive Information: Might provide clues about forthcoming monetary policy adjustments.
+
+5. Federal Funds Rate
+    i) Monetary Policy Impact: A deeper understanding of how federal rate changes percolate through the bond market.
+    ii) Economic Indicator: An indirect showcase of the monetary policy’s effect on economic actions and conditions.
+
+6. Stock Market Indices (e.g., S&P 500)
+    i) Risk Appetite Insight: Indicates shifts in investor sentiment through convergence or divergence between markets.
+    ii) Asset Allocation: Facilitates informed decision-making regarding distribution of investments between bonds and equities.
+
+7. Currency Value (e.g., USD Index)
+    i) Global Investment Strategy: Helps strategize global investments by understanding correlations between bond yields and currency values.
+    ii) Trade and Economic Impact: Elucidates potential cascading effects on trade and the economy spurred by currency value fluctuations.
+
+@imf
+
+```{python}
+import plotly.graph_objects as go
+import plotly.io as pio
+import pandas as pd
+import warnings
+pio.renderers.default = "notebook_connected"
+df = pd.read_excel('data/data/t-bill-vs-econ-index.xlsx')
+df.ffill(inplace=True)
+for col in df.columns[1:]:
+    df[col] = (df[col] - df[col].mean()) / df[col].std()
+fig1 = go.Figure()
+for i, col in enumerate(df.columns[1:]):
+    visible_bool = i < 4  
+    fig1.add_trace(go.Scatter(x=df['observation_date'], y=df[col], name=col, visible=visible_bool,line=dict(width=1)))
+buttons = [
+    dict(label='Treasury Only',
+         method='update',
+         args=[{'visible': [True, True, True, True, False, False, False, False, False]}]),
+    dict(label='Compare to CPI',
+         method='update',
+         args=[{'visible': [True, True, True, True, True, False, False, False, False]}]),
+    dict(label='Compare to FEDFUNDS',
+         method='update',
+         args=[{'visible': [True, True, True, True, False, True, False, False, False]}]),
+    dict(label='Compare to USDIDX',
+         method='update',
+         args=[{'visible': [True, True, True, True, False, False, True, False, False]}]),
+    dict(label='Compare to GDP',
+         method='update',
+         args=[{'visible': [True, True, True, True, False, False, False, True, False]}]),
+    dict(label='Compare to UER',
+         method='update',
+         args=[{'visible': [True, True, True, True, False, False, False, False, True]}]),
+    dict(label='Show All',
+         method='update',
+         args=[{'visible': [True for _ in df.columns[1:]]}]),
+    dict(label='None',
+         method='update',
+         args=[{'visible': [False for _ in df.columns[1:]]}])
+]
+
+fig1.update_layout(
+    updatemenus=[
+        dict(
+            buttons=buttons,
+            direction="down",
+            active=0,  
+            x=1.2,
+            y=0.68,
+        ),
+    ],
+    xaxis=dict(
+        rangeslider=dict(visible=True),
+        type="date"
+    ),
+    title_text="Treasury Bond Yields and Economic Measures Across Time <br><sup>compare the movement of long term Treasury Bill Yields and their influence on major economic indicators</sup>",
+    xaxis_title="Date",
+    yaxis_title="Standardized Rates",
+    width=900,
+    height=600,
+    margin=dict(t=100),
+    plot_bgcolor='white',
+)
+
+fig1.update_xaxes(gridcolor='lightgrey', griddash='dot')
+fig1.update_yaxes(gridcolor='lightgrey', griddash='dot')
+note = 'Source:<a href="https://fred.stlouisfed.org/"">Federal Reserve Economic Data</a>'
+fig1.add_annotation(
+    showarrow=False,
+    text=note,
+    font=dict(size=10),
+    xref='paper',
+    x=1.17,
+    yref='paper',
+    y=-0.45
+)
+
+fig1.show()
+```
