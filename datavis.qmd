@@ -7,7 +7,7 @@ format:
     toc: true
     code-fold: true
     code-tools: true
-    embed-resources: true
+    embed-resources: false
     mermaid:
       theme: neutral
 bibliography: citation.bib
@@ -80,7 +80,7 @@ fig.update_layout(
         rangeslider=dict(visible=True),
         type="date"
     ),
-    title_text="Treasury Bill Constant Maturity Minus Federal Funds Rate <br><sup>reflects the difference between various Treasury Bill yields and the Federal Funds Rate</sup> ",
+    title_text="Treasury Bill Constant Maturity Minus Federal Funds Rate <br><sup>reflect the difference between various Treasury Bill yields and the Federal Funds Rate</sup> ",
     xaxis_title="Date",
     yaxis_title="Treasury Yield Rates",
     width=900,

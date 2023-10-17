@@ -10,15 +10,14 @@ website:
     search: true
     tools:
       - icon: github
-        href: https://github.com/elliotzli/dsan5600-project
+        href: https://github.com/elliotzli/dsan5600_finalproject
       - icon: linkedin
         href: https://www.linkedin.com/in/zhengze-li-90517b193/
     contents:
       - section: "Introduction, Data, and Visual Analysis "
         contents:
-          - href: https://elliotzli.georgetown.domains
-            text: About Me - Main Page
           - index.qmd
+          - intro.qmd
           - datasource.qmd
           - datavis.qmd
           - eda.qmd
