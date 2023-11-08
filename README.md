@@ -4,18 +4,6 @@
 
 This repository documents an extensive analysis of the impact of the Fed Funds Rate on various sectors of the economy. The study delves into the dynamics of the bond market, stock market, exchange rates, inflation, and unemployment to understand the broader implications of monetary policy adjustments.
 
-### Table of Contents
-
--   [Introduction](#introduction)
--   [Data Sources and Visualization](#data-visualization)
--   [Exploratory Data Analysis (EDA)](#eda)
--   [Time Series Modeling](#time-series-modeling)
--   [Financial Modeling](#fin-modeling)
--   [Deep Learning](#deep-learning)
--   [Spectral Analysis and Filtering (SAF)](#saf)
--   [Conclusions](#conclusion)
--   [References](#reference)
-
 ### Project Structure
 
 ```         
