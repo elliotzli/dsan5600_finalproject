@@ -39,7 +39,7 @@ library(knitr)
 
 ## Economic Indicator
 
-I choose the `ARIMA` model for forecasting economic indicators because it's useful for forecasting a series where the data points are independent of the seasonal components, which is the case with the economic indicators such as `CPI`, `GDP`, `USD index`, `unemployment rate `, and `mortgage rate`. These indicators typically have underlying trends or cycles that ARIMA can address through differencing, making the data stationary before applying auto-regressive and moving average components to capture the relationships in the data.
+I choose the `ARIMA` model for forecasting economic indicators because it's useful for forecasting a series where the data points are independent of the seasonal components, which is the case with the economic indicators such as `CPI`, `GDP`, `USD index`, `unemployment rate`, and `mortgage rate`. These indicators typically have underlying trends or cycles that ARIMA can address through differencing, making the data stationary before applying auto-regressive and moving average components to capture the relationships in the data.
 
 ::: panel-tabset
 
