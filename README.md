@@ -7,14 +7,14 @@ This repository documents an extensive analysis of the impact of the Fed Funds R
 ### Table of Contents
 
 -   [Introduction](#introduction)
--   [Data Sources and Visualization](#data-sources-and-visualization)
--   [Exploratory Data Analysis (EDA)](#exploratory-data-analysis-eda)
+-   [Data Sources and Visualization](#data-visualization)
+-   [Exploratory Data Analysis (EDA)](#eda)
 -   [Time Series Modeling](#time-series-modeling)
 -   [Financial Modeling](#fin-modeling)
--   [Deep Learning Approaches](#deep-learning-approaches)
--   [Spectral Analysis and Filtering (SAF)](#spectral-analysis-and-filtering-saf)
--   [Conclusions](#conclusions)
--   [References](#references)
+-   [Deep Learning](#deep-learning)
+-   [Spectral Analysis and Filtering (SAF)](#saf)
+-   [Conclusions](#conclusion)
+-   [References](#reference)
 
 ### Project Structure
 
@@ -27,12 +27,32 @@ This repository documents an extensive analysis of the impact of the Fed Funds R
 ├── citation.bib
 ├── conclusions.qmd
 ├── data
-│   ├── data
-│   │   ├── [Excel datasets]
-│   ├── journal
-│   │   └── federal-reserve-hls.pdf
-│   └── plot
-│       ├── [Image plots]
+│   ├── data
+│   │   ├── 1-yrs-t-bill-rate.xlsx
+│   │   ├── 10-yrs-t-bill-yield.xlsx
+│   │   ├── 20-yrs-t-bill-yield.xlsx
+│   │   ├── 3-mon-t-bill-rate.xlsx
+│   │   ├── 30-yrs-mortgage-rate.xlsx
+│   │   ├── 30-yrs-t-bill-yield.xlsx
+│   │   ├── 5-yrs-t-bill-rate.xlsx
+│   │   ├── 6-mon-t-bill-rate.xlsx
+│   │   ├── GDP.xlsx
+│   │   ├── consumer-sentiment.xlsx
+│   │   ├── cpi-u.xlsx
+│   │   ├── dollar-index.xlsx
+│   │   ├── fedfunds.xlsx
+│   │   ├── sp500.xlsx
+│   │   ├── sr_t-bill-rates.xlsx
+│   │   ├── t-bill-vs-econ-index.xlsx
+│   │   └── unemploy.xlsx
+│   ├── journal
+│   │   └── federal-reserve-hls.pdf
+│   └── plot
+│       ├── fed-fund-rate.png
+│       ├── fed.jpg
+│       ├── intro1.jpeg
+│       ├── resume.png
+│       └── t-bill-yield-curve.png
 ├── datasource.qmd
 ├── datavis.qmd
 ├── deeplearning.qmd
@@ -50,11 +70,11 @@ This repository contains `.qmd` files for analysis, a bibliography file, dataset
 
 The introductory `intro.qmd` addresses the importance of the risk-free rate in the financial ecosystem, with a focus on the Treasury Bill (T-Bill) interest rate as a benchmark. It also clarifies the role of the Federal Reserve in influencing the Fed Funds Rate, which impacts the yield curve and overall interest rates.
 
-### Data Source and Visualization {#data-source-and-visualization}
+### Data Source and Visualization {#data-visualization}
 
 This section (`datasource.qmd` and `datavis.qmd`) covers the datasets used for analysis and the visual representation of our findings.
 
-### Exploratory Data Analysis {#exploratory-data-analysis}
+### Exploratory Data Analysis {#eda}
 
 The EDA process is documented in `eda.qmd`, which includes a rigorous analysis of the data related to the Fed Funds Rate and its economic implications.
 
@@ -66,18 +86,18 @@ Time series models such as `ARIMA`, `ARIMAX`, `SARIMA`, `ARIMAX`, and `VAR` are 
 
 These files document `arch.qmd` and `garch.qmd` shows the methodologies and results of financial analysis `ARCH` and `GARCH` conducted on economic data.
 
-### Deep Learning Approaches {#deep-learning-approaches}
+### Deep Learning Approaches {#deep-learning}
 
 `deeplearning.qmd` explores the use of advanced neural networks to model complex economic interactions.
 
-### Spectral Analysis and Filtering (SAF) {#spectral-analysis-and-filtering-saf}
+### Spectral Analysis and Filtering (SAF) {#saf)}
 
 `saf.qmd` covers techniques used to analyze and filter signals in the frequency domain, providing insights into cyclical behaviors within the financial data.
 
-### Conclusions {#conclusions}
+### Conclusions {#conclusion}
 
 The `conclusions.qmd` file synthesizes the insights and findings from the various analyses conducted.
 
-### References {#references}
+### References {#reference}
 
 Refer to `citation.bib` for a comprehensive list of all the academic and data sources referenced throughout the project.
