@@ -1018,7 +1018,7 @@ for (col in columns) {
 :::
 
 
-## Moving Average Smoothing Analysis
+## Moving Average Smoothing
 
 ::: {.panel-tabset}
 
