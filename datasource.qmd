@@ -14,6 +14,9 @@ bibliography: citation.bib
 execute: 
   echo: true
 ---
+
+***
+
 Federal Reserve Economic Data (FRED), is a top pick for anyone diving into economic and financial projects, offering a reliable data pool that is free for public usage. It's user-friendly and hosts a wide array of economic markers, from the local to global scales, making it a versatile tool for various analyses, including exploring Treasury bill yields. The platform keeps its data up to date, providing a solid base for relevant research. And with easy access to both U.S. and international data, you can explore and compare economic trends from various angles. So, whether you're seasoned in data analysis or just starting, FRED provides a straightforward, accessible, and dependable data source to anchor your research.
 
 Below is a prelimiary collection of relevant datasets to federal funds rates, including Fed Funds Rate, Consumer Price Index, Unemployment Rate, U.S. Dollar Index, Consumer Sentiment, 10 Year Treasury Bill Rate, S&P 500 Index, and 30 Year Mortgage Rate, etc.

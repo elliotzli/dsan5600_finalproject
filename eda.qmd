@@ -12,12 +12,16 @@ format:
       theme: neutral
 bibliography: citation.bib
 execute: 
-  echo: true
+  echo: false
+  warning: false
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(warning=FALSE, message=FALSE)
 
+library(zoo)
+library(TTR)
+library(readr)
 library(readxl)
 library(ggplot2)
 library(forecast)
@@ -26,11 +30,12 @@ library(xts)
 library(tidyverse)
 ```
 
-## Treasury Bill Constant Maturities Minus Federal Funds Rate
+## Treasury Security
 
 ::: {.panel-tabset}
 
-## 3-Month T-Bill Yield Minus Federal Funds Rate
+## 3 Month Treasury Bill
+
 ```{r fig.width=8, fig.height=4}
 df <- read_excel('data/data/sr_t-bill-rates.xlsx')
 df$observation_date <- as.Date(df$observation_date)
@@ -112,7 +117,7 @@ for (col in columns) {
   }
 ```
 
-## 6-Month T-Bill Yield Minus Federal Funds Rate
+## 6 Month Treasury Bill
 ```{r fig.width=8, fig.height=4}
 df <- read_excel('data/data/sr_t-bill-rates.xlsx')
 df$observation_date <- as.Date(df$observation_date)
@@ -194,7 +199,7 @@ for (col in columns) {
   }
 ```
 
-## 1-Year T-Bill Yield Minus Federal Funds Rate
+## 1 Year Treasury Bill
 ```{r fig.width=8, fig.height=4}
 df <- read_excel('data/data/sr_t-bill-rates.xlsx')
 df$observation_date <- as.Date(df$observation_date)
@@ -275,12 +280,6 @@ for (col in columns) {
   }
 ```
 
-:::
-
-## Market Yield on U.S. Treasury Bonds Constant Maturity, Quoted on an Investment Basis
-
-::: {.panel-tabset}
-
 ```{r}
 df <- read_excel('data/data/t-bill-vs-econ-index.xlsx',col_types = c("date","numeric","numeric","numeric","numeric","numeric","numeric","numeric","numeric","numeric"))
 df$observation_date <- as.Date(df$observation_date)
@@ -288,7 +287,7 @@ selected_columns <- c("DGS10", "DGS20", "DGS30", "MORTGAGE30", "CPI", "FEDFUNDS"
 df <- df[!apply(is.na(df[selected_columns]) | df[selected_columns] == "", 1, all), ]
 ```
 
-## Market Yield on 10-Year U.S. Treasury Bonds
+## 10 Year Treasury Bond
 
 ```{r fig.width=8, fig.height=4}
 columns <- c("DGS10")
@@ -369,7 +368,7 @@ for (col in columns) {
   }
 ```
 
-## Market Yield on 20-Year U.S. Treasury Bonds
+## 20 Year Treasury Bond
 
 ```{r fig.width=8, fig.height=4}
 columns <- c("DGS20")
@@ -450,7 +449,7 @@ for (col in columns) {
   }
 ```
 
-## Market Yield on 30-Year U.S. Treasury Bonds
+## 30 Year Treasury Bond
 
 ```{r fig.width=8, fig.height=4}
 columns <- c("DGS30")
@@ -533,9 +532,249 @@ for (col in columns) {
 
 :::
 
-## Economic Indicators
+## Economic Indicator
 
 ::: {.panel-tabset}
+
+## CPI
+
+```{r fig.width=8, fig.height=4}
+columns <- c("CPI")
+df_cpi <- df[!is.na(df[columns]) & df[columns] != "", ]
+for (col in columns) {
+  xts_data <- xts(df_cpi[, col], order.by = df_cpi$observation_date)
+  ts_data <- ts(df_cpi[, col], start=c(1962, 2, 1), frequency=12)
+  decomposed <- decompose(ts_data)
+  
+  plot(decomposed$x, main = paste("Original Time Series:", col), xlab = 'Date', ylab = 'Value')
+  plot(decomposed$trend, main = "Trend Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$seasonal, main = "Seasonal Component", xlab = 'Date', ylab = 'Value',ylim = c(-0.5,0.5))
+  plot(decomposed$random, main = "Remainder Component", xlab = 'Date', ylab = 'Value')
+  lag.plot(ts_data, lags=1, do.lines=FALSE, main="Lag Plot")
+  acf_data <- acf(ts_data, main=paste("ACF Plot:", col))
+  dacf_data <- pacf(ts_data, main=paste("PACF Plot:", col))
+  diff_ts_data <- diff(ts_data)
+  acf(diff_ts_data, main=paste("ACF After Differencing:", col))
+  pacf(diff_ts_data, main=paste("PACF After Differencing:", col))
+  }
+
+for (col in columns) {
+  trend <- decomposed$trend
+  if (!is.null(trend)) {
+    trend_mean <- mean(trend, na.rm = TRUE)
+    trend_sd <- sd(trend, na.rm = TRUE)
+    trend_trend <- ifelse(trend_mean > 0, "increasing", "decreasing")
+    cat("The trend component suggests a", trend_trend, "trend, \nwith an average value of", round(trend_mean, 2), "and a standard deviation of", round(trend_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible trend component.\n\n")
+  }
+  
+  seasonal <- decomposed$seasonal
+  if (!is.null(seasonal)) {
+    seasonal_mean <- mean(seasonal, na.rm = TRUE)
+    seasonal_sd <- sd(seasonal, na.rm = TRUE)
+    cat("The seasonal component suggests a repeating pattern, \nwith an average value of", round(seasonal_mean, 2), "and a standard deviation of", round(seasonal_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible seasonal component.\n\n")
+  }
+  
+  remainder <- decomposed$random
+  if (!is.null(remainder)) {
+    remainder_mean <- mean(remainder, na.rm = TRUE)
+    remainder_sd <- sd(remainder, na.rm = TRUE)
+    cat("The remainder component suggests random fluctuations, \nwith an average value of", round(remainder_mean, 2), "and a standard deviation of", round(remainder_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible remainder component.\n\n")
+  }
+  
+  if (decomposed$type == "multiplicative") {
+    cat("The time series appears to be multiplicative.\n\n")
+  } else {
+    cat("The time series appears to be additive.\n\n")
+  }
+  
+  adf_test <- adf.test(ts_data)
+  cat("Augmented Dickey-Fuller Test Results:\n")
+  cat("Test Statistic:", adf_test$statistic, "\n")
+  cat("P-value:", adf_test$p.value, "\n")
+  cat("Critical Values:", adf_test$critical, "\n")
+  if (adf_test$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")}
+
+  adf_test_diff <- adf.test(diff_ts_data)
+  cat("Augmented Dickey-Fuller Test Results After Differencing:\n")
+  cat("Test Statistic:", adf_test_diff$statistic, "\n")
+  cat("P-value:", adf_test_diff$p.value, "\n")
+  cat("Critical Values:", adf_test_diff$critical, "\n")
+  if (adf_test_diff$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")
+  }
+  }
+```
+
+## GDP
+
+```{r fig.width=8, fig.height=4}
+columns <- c("GDP")
+df_gdp <- df[!is.na(df[columns]) & df[columns] != "", ]
+for (col in columns) {
+  xts_data <- xts(df_gdp[, col], order.by = df_gdp$observation_date)
+  ts_data <- ts(df_gdp[, col], start=c(1962, 10, 1), frequency=4)
+  decomposed <- decompose(ts_data)
+  
+  plot(decomposed$x, main = paste("Original Time Series:", col), xlab = 'Date', ylab = 'Value')
+  plot(decomposed$trend, main = "Trend Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$seasonal, main = "Seasonal Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$random, main = "Remainder Component", xlab = 'Date', ylab = 'Value')
+  lag.plot(ts_data, lags=1, do.lines=FALSE, main="Lag Plot")
+  acf_data <- acf(ts_data, main=paste("ACF Plot:", col))
+  dacf_data <- pacf(ts_data, main=paste("PACF Plot:", col))
+  diff_ts_data <- diff(ts_data)
+  acf(diff_ts_data, main=paste("ACF After Differencing:", col))
+  pacf(diff_ts_data, main=paste("PACF After Differencing:", col))
+  }
+
+for (col in columns) {
+  trend <- decomposed$trend
+  if (!is.null(trend)) {
+    trend_mean <- mean(trend, na.rm = TRUE)
+    trend_sd <- sd(trend, na.rm = TRUE)
+    trend_trend <- ifelse(trend_mean > 0, "increasing", "decreasing")
+    cat("The trend component suggests a", trend_trend, "trend, \nwith an average value of", round(trend_mean, 2), "and a standard deviation of", round(trend_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible trend component.\n\n")
+  }
+  
+  seasonal <- decomposed$seasonal
+  if (!is.null(seasonal)) {
+    seasonal_mean <- mean(seasonal, na.rm = TRUE)
+    seasonal_sd <- sd(seasonal, na.rm = TRUE)
+    cat("The seasonal component suggests a repeating pattern, \nwith an average value of", round(seasonal_mean, 2), "and a standard deviation of", round(seasonal_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible seasonal component.\n\n")
+  }
+  
+  remainder <- decomposed$random
+  if (!is.null(remainder)) {
+    remainder_mean <- mean(remainder, na.rm = TRUE)
+    remainder_sd <- sd(remainder, na.rm = TRUE)
+    cat("The remainder component suggests random fluctuations, \nwith an average value of", round(remainder_mean, 2), "and a standard deviation of", round(remainder_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible remainder component.\n\n")
+  }
+  
+  if (decomposed$type == "multiplicative") {
+    cat("The time series appears to be multiplicative.\n\n")
+  } else {
+    cat("The time series appears to be additive.\n\n")
+  }
+  
+  adf_test <- adf.test(ts_data)
+  cat("Augmented Dickey-Fuller Test Results:\n")
+  cat("Test Statistic:", adf_test$statistic, "\n")
+  cat("P-value:", adf_test$p.value, "\n")
+  cat("Critical Values:", adf_test$critical, "\n")
+  if (adf_test$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")}
+
+  adf_test_diff <- adf.test(diff_ts_data)
+  cat("Augmented Dickey-Fuller Test Results After Differencing:\n")
+  cat("Test Statistic:", adf_test_diff$statistic, "\n")
+  cat("P-value:", adf_test_diff$p.value, "\n")
+  cat("Critical Values:", adf_test_diff$critical, "\n")
+  if (adf_test_diff$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")
+  }
+  }
+```
+
+## USD Index
+
+```{r fig.width=8, fig.height=4}
+columns <- c("USDIDX")
+df_usd <- df[!is.na(df[columns]) & df[columns] != "", ]
+for (col in columns) {
+  xts_data <- xts(df_usd[, col], order.by = df_usd$observation_date)
+  ts_data <- ts(df_usd[, col], start=c(2018, 9, 17), frequency=365)
+  decomposed <- decompose(ts_data)
+  
+  plot(decomposed$x, main = paste("Original Time Series:", col), xlab = 'Date', ylab = 'Value')
+  plot(decomposed$trend, main = "Trend Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$seasonal, main = "Seasonal Component", xlab = 'Date', ylab = 'Value')
+  plot(decomposed$random, main = "Remainder Component", xlab = 'Date', ylab = 'Value')
+  lag.plot(ts_data, lags=1, do.lines=FALSE, main="Lag Plot")
+  acf_data <- acf(ts_data, main=paste("ACF Plot:", col))
+  dacf_data <- pacf(ts_data, main=paste("PACF Plot:", col))
+  diff_ts_data <- diff(ts_data)
+  acf(diff_ts_data, main=paste("ACF After Differencing:", col))
+  pacf(diff_ts_data, main=paste("PACF After Differencing:", col))
+  }
+
+for (col in columns) {
+  trend <- decomposed$trend
+  if (!is.null(trend)) {
+    trend_mean <- mean(trend, na.rm = TRUE)
+    trend_sd <- sd(trend, na.rm = TRUE)
+    trend_trend <- ifelse(trend_mean > 0, "increasing", "decreasing")
+    cat("The trend component suggests a", trend_trend, "trend, \nwith an average value of", round(trend_mean, 2), "and a standard deviation of", round(trend_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible trend component.\n\n")
+  }
+  
+  seasonal <- decomposed$seasonal
+  if (!is.null(seasonal)) {
+    seasonal_mean <- mean(seasonal, na.rm = TRUE)
+    seasonal_sd <- sd(seasonal, na.rm = TRUE)
+    cat("The seasonal component suggests a repeating pattern, \nwith an average value of", round(seasonal_mean, 2), "and a standard deviation of", round(seasonal_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible seasonal component.\n\n")
+  }
+  
+  remainder <- decomposed$random
+  if (!is.null(remainder)) {
+    remainder_mean <- mean(remainder, na.rm = TRUE)
+    remainder_sd <- sd(remainder, na.rm = TRUE)
+    cat("The remainder component suggests random fluctuations, \nwith an average value of", round(remainder_mean, 2), "and a standard deviation of", round(remainder_sd, 2), ".\n\n")
+  } else {
+    cat("There is no discernible remainder component.\n\n")
+  }
+  
+  if (decomposed$type == "multiplicative") {
+    cat("The time series appears to be multiplicative.\n\n")
+  } else {
+    cat("The time series appears to be additive.\n\n")
+  }
+  
+  adf_test <- adf.test(ts_data)
+  cat("Augmented Dickey-Fuller Test Results:\n")
+  cat("Test Statistic:", adf_test$statistic, "\n")
+  cat("P-value:", adf_test$p.value, "\n")
+  cat("Critical Values:", adf_test$critical, "\n")
+  if (adf_test$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")}
+
+  adf_test_diff <- adf.test(diff_ts_data)
+  cat("Augmented Dickey-Fuller Test Results After Differencing:\n")
+  cat("Test Statistic:", adf_test_diff$statistic, "\n")
+  cat("P-value:", adf_test_diff$p.value, "\n")
+  cat("Critical Values:", adf_test_diff$critical, "\n")
+  if (adf_test_diff$p.value < 0.05) {
+    cat("The time series is stationary based on the ADF test.\n\n")
+  } else {
+    cat("The time series is not stationary based on the ADF test.\n\n")
+  }
+  }
+```
 
 ## Fed Funds Rate
 
@@ -697,165 +936,6 @@ for (col in columns) {
   }
 ```
 
-## Comsumer Price Index
-
-```{r fig.width=8, fig.height=4}
-columns <- c("CPI")
-df_cpi <- df[!is.na(df[columns]) & df[columns] != "", ]
-for (col in columns) {
-  xts_data <- xts(df_cpi[, col], order.by = df_cpi$observation_date)
-  ts_data <- ts(df_cpi[, col], start=c(1962, 2, 1), frequency=12)
-  decomposed <- decompose(ts_data)
-  
-  plot(decomposed$x, main = paste("Original Time Series:", col), xlab = 'Date', ylab = 'Value')
-  plot(decomposed$trend, main = "Trend Component", xlab = 'Date', ylab = 'Value')
-  plot(decomposed$seasonal, main = "Seasonal Component", xlab = 'Date', ylab = 'Value',ylim = c(-0.5,0.5))
-  plot(decomposed$random, main = "Remainder Component", xlab = 'Date', ylab = 'Value')
-  lag.plot(ts_data, lags=1, do.lines=FALSE, main="Lag Plot")
-  acf_data <- acf(ts_data, main=paste("ACF Plot:", col))
-  dacf_data <- pacf(ts_data, main=paste("PACF Plot:", col))
-  diff_ts_data <- diff(ts_data)
-  acf(diff_ts_data, main=paste("ACF After Differencing:", col))
-  pacf(diff_ts_data, main=paste("PACF After Differencing:", col))
-  }
-
-for (col in columns) {
-  trend <- decomposed$trend
-  if (!is.null(trend)) {
-    trend_mean <- mean(trend, na.rm = TRUE)
-    trend_sd <- sd(trend, na.rm = TRUE)
-    trend_trend <- ifelse(trend_mean > 0, "increasing", "decreasing")
-    cat("The trend component suggests a", trend_trend, "trend, \nwith an average value of", round(trend_mean, 2), "and a standard deviation of", round(trend_sd, 2), ".\n\n")
-  } else {
-    cat("There is no discernible trend component.\n\n")
-  }
-  
-  seasonal <- decomposed$seasonal
-  if (!is.null(seasonal)) {
-    seasonal_mean <- mean(seasonal, na.rm = TRUE)
-    seasonal_sd <- sd(seasonal, na.rm = TRUE)
-    cat("The seasonal component suggests a repeating pattern, \nwith an average value of", round(seasonal_mean, 2), "and a standard deviation of", round(seasonal_sd, 2), ".\n\n")
-  } else {
-    cat("There is no discernible seasonal component.\n\n")
-  }
-  
-  remainder <- decomposed$random
-  if (!is.null(remainder)) {
-    remainder_mean <- mean(remainder, na.rm = TRUE)
-    remainder_sd <- sd(remainder, na.rm = TRUE)
-    cat("The remainder component suggests random fluctuations, \nwith an average value of", round(remainder_mean, 2), "and a standard deviation of", round(remainder_sd, 2), ".\n\n")
-  } else {
-    cat("There is no discernible remainder component.\n\n")
-  }
-  
-  if (decomposed$type == "multiplicative") {
-    cat("The time series appears to be multiplicative.\n\n")
-  } else {
-    cat("The time series appears to be additive.\n\n")
-  }
-  
-  adf_test <- adf.test(ts_data)
-  cat("Augmented Dickey-Fuller Test Results:\n")
-  cat("Test Statistic:", adf_test$statistic, "\n")
-  cat("P-value:", adf_test$p.value, "\n")
-  cat("Critical Values:", adf_test$critical, "\n")
-  if (adf_test$p.value < 0.05) {
-    cat("The time series is stationary based on the ADF test.\n\n")
-  } else {
-    cat("The time series is not stationary based on the ADF test.\n\n")}
-
-  adf_test_diff <- adf.test(diff_ts_data)
-  cat("Augmented Dickey-Fuller Test Results After Differencing:\n")
-  cat("Test Statistic:", adf_test_diff$statistic, "\n")
-  cat("P-value:", adf_test_diff$p.value, "\n")
-  cat("Critical Values:", adf_test_diff$critical, "\n")
-  if (adf_test_diff$p.value < 0.05) {
-    cat("The time series is stationary based on the ADF test.\n\n")
-  } else {
-    cat("The time series is not stationary based on the ADF test.\n\n")
-  }
-  }
-```
-
-## GDP
-
-```{r fig.width=8, fig.height=4}
-columns <- c("GDP")
-df_gdp <- df[!is.na(df[columns]) & df[columns] != "", ]
-for (col in columns) {
-  xts_data <- xts(df_gdp[, col], order.by = df_gdp$observation_date)
-  ts_data <- ts(df_gdp[, col], start=c(1962, 10, 1), frequency=4)
-  decomposed <- decompose(ts_data)
-  
-  plot(decomposed$x, main = paste("Original Time Series:", col), xlab = 'Date', ylab = 'Value')
-  plot(decomposed$trend, main = "Trend Component", xlab = 'Date', ylab = 'Value')
-  plot(decomposed$seasonal, main = "Seasonal Component", xlab = 'Date', ylab = 'Value')
-  plot(decomposed$random, main = "Remainder Component", xlab = 'Date', ylab = 'Value')
-  lag.plot(ts_data, lags=1, do.lines=FALSE, main="Lag Plot")
-  acf_data <- acf(ts_data, main=paste("ACF Plot:", col))
-  dacf_data <- pacf(ts_data, main=paste("PACF Plot:", col))
-  diff_ts_data <- diff(ts_data)
-  acf(diff_ts_data, main=paste("ACF After Differencing:", col))
-  pacf(diff_ts_data, main=paste("PACF After Differencing:", col))
-  }
-
-for (col in columns) {
-  trend <- decomposed$trend
-  if (!is.null(trend)) {
-    trend_mean <- mean(trend, na.rm = TRUE)
-    trend_sd <- sd(trend, na.rm = TRUE)
-    trend_trend <- ifelse(trend_mean > 0, "increasing", "decreasing")
-    cat("The trend component suggests a", trend_trend, "trend, \nwith an average value of", round(trend_mean, 2), "and a standard deviation of", round(trend_sd, 2), ".\n\n")
-  } else {
-    cat("There is no discernible trend component.\n\n")
-  }
-  
-  seasonal <- decomposed$seasonal
-  if (!is.null(seasonal)) {
-    seasonal_mean <- mean(seasonal, na.rm = TRUE)
-    seasonal_sd <- sd(seasonal, na.rm = TRUE)
-    cat("The seasonal component suggests a repeating pattern, \nwith an average value of", round(seasonal_mean, 2), "and a standard deviation of", round(seasonal_sd, 2), ".\n\n")
-  } else {
-    cat("There is no discernible seasonal component.\n\n")
-  }
-  
-  remainder <- decomposed$random
-  if (!is.null(remainder)) {
-    remainder_mean <- mean(remainder, na.rm = TRUE)
-    remainder_sd <- sd(remainder, na.rm = TRUE)
-    cat("The remainder component suggests random fluctuations, \nwith an average value of", round(remainder_mean, 2), "and a standard deviation of", round(remainder_sd, 2), ".\n\n")
-  } else {
-    cat("There is no discernible remainder component.\n\n")
-  }
-  
-  if (decomposed$type == "multiplicative") {
-    cat("The time series appears to be multiplicative.\n\n")
-  } else {
-    cat("The time series appears to be additive.\n\n")
-  }
-  
-  adf_test <- adf.test(ts_data)
-  cat("Augmented Dickey-Fuller Test Results:\n")
-  cat("Test Statistic:", adf_test$statistic, "\n")
-  cat("P-value:", adf_test$p.value, "\n")
-  cat("Critical Values:", adf_test$critical, "\n")
-  if (adf_test$p.value < 0.05) {
-    cat("The time series is stationary based on the ADF test.\n\n")
-  } else {
-    cat("The time series is not stationary based on the ADF test.\n\n")}
-
-  adf_test_diff <- adf.test(diff_ts_data)
-  cat("Augmented Dickey-Fuller Test Results After Differencing:\n")
-  cat("Test Statistic:", adf_test_diff$statistic, "\n")
-  cat("P-value:", adf_test_diff$p.value, "\n")
-  cat("Critical Values:", adf_test_diff$critical, "\n")
-  if (adf_test_diff$p.value < 0.05) {
-    cat("The time series is stationary based on the ADF test.\n\n")
-  } else {
-    cat("The time series is not stationary based on the ADF test.\n\n")
-  }
-  }
-```
 ## Unemployment Rate
 
 ```{r fig.width=8, fig.height=4}
@@ -935,87 +1015,148 @@ for (col in columns) {
   }
   }
 ```
+:::
 
-## USD Index
 
-```{r fig.width=8, fig.height=4}
-columns <- c("USDIDX")
-df_usd <- df[!is.na(df[columns]) & df[columns] != "", ]
-for (col in columns) {
-  xts_data <- xts(df_usd[, col], order.by = df_usd$observation_date)
-  ts_data <- ts(df_usd[, col], start=c(2018, 9, 17), frequency=365)
-  decomposed <- decompose(ts_data)
-  
-  plot(decomposed$x, main = paste("Original Time Series:", col), xlab = 'Date', ylab = 'Value')
-  plot(decomposed$trend, main = "Trend Component", xlab = 'Date', ylab = 'Value')
-  plot(decomposed$seasonal, main = "Seasonal Component", xlab = 'Date', ylab = 'Value')
-  plot(decomposed$random, main = "Remainder Component", xlab = 'Date', ylab = 'Value')
-  lag.plot(ts_data, lags=1, do.lines=FALSE, main="Lag Plot")
-  acf_data <- acf(ts_data, main=paste("ACF Plot:", col))
-  dacf_data <- pacf(ts_data, main=paste("PACF Plot:", col))
-  diff_ts_data <- diff(ts_data)
-  acf(diff_ts_data, main=paste("ACF After Differencing:", col))
-  pacf(diff_ts_data, main=paste("PACF After Differencing:", col))
-  }
+## Moving Average Smoothing Analysis
 
-for (col in columns) {
-  trend <- decomposed$trend
-  if (!is.null(trend)) {
-    trend_mean <- mean(trend, na.rm = TRUE)
-    trend_sd <- sd(trend, na.rm = TRUE)
-    trend_trend <- ifelse(trend_mean > 0, "increasing", "decreasing")
-    cat("The trend component suggests a", trend_trend, "trend, \nwith an average value of", round(trend_mean, 2), "and a standard deviation of", round(trend_sd, 2), ".\n\n")
-  } else {
-    cat("There is no discernible trend component.\n\n")
-  }
-  
-  seasonal <- decomposed$seasonal
-  if (!is.null(seasonal)) {
-    seasonal_mean <- mean(seasonal, na.rm = TRUE)
-    seasonal_sd <- sd(seasonal, na.rm = TRUE)
-    cat("The seasonal component suggests a repeating pattern, \nwith an average value of", round(seasonal_mean, 2), "and a standard deviation of", round(seasonal_sd, 2), ".\n\n")
-  } else {
-    cat("There is no discernible seasonal component.\n\n")
-  }
-  
-  remainder <- decomposed$random
-  if (!is.null(remainder)) {
-    remainder_mean <- mean(remainder, na.rm = TRUE)
-    remainder_sd <- sd(remainder, na.rm = TRUE)
-    cat("The remainder component suggests random fluctuations, \nwith an average value of", round(remainder_mean, 2), "and a standard deviation of", round(remainder_sd, 2), ".\n\n")
-  } else {
-    cat("There is no discernible remainder component.\n\n")
-  }
-  
-  if (decomposed$type == "multiplicative") {
-    cat("The time series appears to be multiplicative.\n\n")
-  } else {
-    cat("The time series appears to be additive.\n\n")
-  }
-  
-  adf_test <- adf.test(ts_data)
-  cat("Augmented Dickey-Fuller Test Results:\n")
-  cat("Test Statistic:", adf_test$statistic, "\n")
-  cat("P-value:", adf_test$p.value, "\n")
-  cat("Critical Values:", adf_test$critical, "\n")
-  if (adf_test$p.value < 0.05) {
-    cat("The time series is stationary based on the ADF test.\n\n")
-  } else {
-    cat("The time series is not stationary based on the ADF test.\n\n")}
+::: {.panel-tabset}
 
-  adf_test_diff <- adf.test(diff_ts_data)
-  cat("Augmented Dickey-Fuller Test Results After Differencing:\n")
-  cat("Test Statistic:", adf_test_diff$statistic, "\n")
-  cat("P-value:", adf_test_diff$p.value, "\n")
-  cat("Critical Values:", adf_test_diff$critical, "\n")
-  if (adf_test_diff$p.value < 0.05) {
-    cat("The time series is stationary based on the ADF test.\n\n")
-  } else {
-    cat("The time series is not stationary based on the ADF test.\n\n")
-  }
-  }
+## CPI
+
+The chart shows the Consumer Price Index (CPI) and its moving averages (MA10, MA50, MA100) all trending upwards, indicating long-term inflation growth. The MA10 closely follows the CPI's short-term fluctuations, while the MA50 and MA100 smooth out these variations, lagging behind and highlighting the broader trend. The recent steep climb in the CPI suggests an acceleration in inflation not yet fully captured by the moving averages.
+
+```{r}
+df <- read_excel('data/data/cpi-u.xlsx')
+df <- na.omit(df)
+df$Date <- as.Date(df[[1]])
+df$CPI <- as.numeric(df[[2]])
+
+df$MA10 <- rollmean(df$CPI, 10 , fill = NA, align = 'right')
+df$MA50 <- rollmean(df$CPI, 50, fill = NA, align = 'right')
+df$MA100 <- rollmean(df$CPI, 100, fill = NA, align = 'right')
+
+plot(df$Date, df$CPI, main='CPI Moving Average', ylab='CPI', xlab='Year', type='l')
+lines(df$Date, df$MA10, col='blue')
+lines(df$Date, df$MA50, col='red')
+lines(df$Date, df$MA100, col='green')
+
+legend("bottomright", # Position of the legend
+       legend = c("CPI", "MA10", "MA50", "MA100"), # The text in the legend
+       col = c("black", "blue", "red", "green"), # The colors
+       lty = 1, # The line types
+       cex = 0.8) # The size of the legend text
+
+cat()
 ```
 
+## GDP
+
+The chart illustrates the Gross Domestic Product (GDP) and its associated moving averages (MA10, MA50, MA100), all ascending, which signifies sustained economic growth. The MA10 is tracking the GDP's immediate shifts, reflecting the economy's short-term variations, whereas the MA50 and MA100 provide a more subdued perspective, trailing behind and emphasizing the long-term economic trend. The noticeable upward trajectory in the most recent GDP data points to a potential surge in economic activity, a detail that the longer-term moving averages have yet to fully incorporate.
+
+```{r}
+df <- read_excel('data/data/GDP.xlsx')
+df <- na.omit(df)
+df$Date <- as.Date(df[[1]])
+df$GDP <- as.numeric(df[[2]])
+
+df$MA10 <- rollmean(df$GDP, 10, fill = NA, align = 'right')
+df$MA50 <- rollmean(df$GDP, 50, fill = NA, align = 'right')
+df$MA100 <- rollmean(df$GDP, 100, fill = NA, align = 'right')
+
+
+plot(df$Date, df$GDP, main='GDP Moving Average', ylab='GDP', xlab='Year', type='l')
+lines(df$Date, df$MA10, col='blue')
+lines(df$Date, df$MA50, col='red')
+lines(df$Date, df$MA100, col='green')
+
+legend("bottomright", # Position of the legend
+       legend = c("GDP", "MA10", "MA50", "MA100"), # The text in the legend
+       col = c("black", "blue", "red", "green"), # The colors
+       lty = 1, # The line types
+       cex = 0.8) # The size of the legend text
+```
+
+## US Dollar Index
+
+The chart shows the US Dollar Index with its moving averages (MA10, MA50, MA100), reflecting a volatile currency market. Short-term fluctuations are closely followed by MA10, while MA50 and MA100 smooth out these fluctuations to reveal more sustained trends. A notable peak and subsequent decline around 2020 are followed by a recovery, with recent trends suggesting an increase in the dollar's value.
+
+```{r}
+df <- read_excel('data/data/dollar-index.xlsx')
+df <- na.omit(df)
+df$Date <- as.Date(df[[1]])
+df$USDIDX <- as.numeric(df[[2]])
+
+df$MA10 <- rollmean(df$USDIDX, 10, fill = NA, align = 'right')
+df$MA50 <- rollmean(df$USDIDX, 50, fill = NA, align = 'right')
+df$MA100 <- rollmean(df$USDIDX, 100, fill = NA, align = 'right')
+
+
+plot(df$Date, df$USDIDX, main='US Dollar Index Moving Average', ylab='US Dollar Index', xlab='Year', type='l')
+lines(df$Date, df$MA10, col='blue')
+lines(df$Date, df$MA50, col='red')
+lines(df$Date, df$MA100, col='green')
+
+legend("bottomright", # Position of the legend
+       legend = c("USDIDX", "MA10", "MA50", "MA100"), # The text in the legend
+       col = c("black", "blue", "red", "green"), # The colors
+       lty = 1, # The line types
+       cex = 0.8) # The size of the legend text
+```
+
+## 30-Year Mortgage Rate
+
+The graph shows the trend of 30-year mortgage rates from around 1980 to 2020, with a clear peak in the early 1980s. It includes the actual rates and three moving averages (50-day, 100-day, and 500-day), which smooth out short-term fluctuations. Over time, there's a notable decline in mortgage rates, with all the lines converging, indicating stabilization of rates towards 2020.
+
+```{r}
+df <- read_excel('data/data/30-yrs-mortgage-rate.xlsx')
+df <- na.omit(df)
+df$Date <- as.Date(df[[1]])
+df$mort <- as.numeric(df[[2]])
+
+df$MA50 <- rollmean(df$mort, 50, fill = NA, align = 'right')
+df$MA100 <- rollmean(df$mort, 100, fill = NA, align = 'right')
+df$MA500 <- rollmean(df$mort, 500, fill = NA, align = 'right')
+
+
+plot(df$Date, df$mort, main='30 Year Mortgage Rate Moving Average', ylab='MORT', xlab='Year', type='l')
+lines(df$Date, df$MA50, col='blue')
+lines(df$Date, df$MA100, col='red')
+lines(df$Date, df$MA500, col='green')
+
+legend("bottomright", # Position of the legend
+       legend = c("MORT", "MA50", "MA100", "MA500"), # The text in the legend
+       col = c("black", "blue", "red", "green"), # The colors
+       lty = 1, # The line types
+       cex = 0.8) # The size of the legend text
+```
+
+## Unemployment Rate
+
+The graph displays the historical trends of the unemployment rate from the 1960s to around 2020, including actual rates and their moving averages over 10, 50, and 100 periods. The chart shows several spikes indicating periods of increased unemployment, with the most significant peaks likely corresponding to economic recessions. Notably, there is an extreme spike in unemployment at the end of the timeline, suggesting a sudden, sharp increase in unemployment, possibly caused by the Coronavirus pandamic.
+
+```{r}
+df <- read_excel('data/data/unemploy.xlsx')
+df <- na.omit(df)
+df$Date <- as.Date(df[[1]])
+df$UER <- as.numeric(df[[2]])
+
+df$MA10 <- rollmean(df$UER, 10, fill = NA, align = 'right')
+df$MA50 <- rollmean(df$UER, 50, fill = NA, align = 'right')
+df$MA100 <- rollmean(df$UER, 100, fill = NA, align = 'right')
+
+
+plot(df$Date, df$UER, main='Unemployment Rate Moving Average', ylab='Unemployment Rate', xlab='Year', type='l')
+lines(df$Date, df$MA10, col='blue')
+lines(df$Date, df$MA50, col='red')
+lines(df$Date, df$MA100, col='green')
+
+legend("bottomright", # Position of the legend
+       legend = c("UER", "MA10", "MA50", "MA100"), # The text in the legend
+       col = c("black", "blue", "red", "green"), # The colors
+       lty = 1, # The line types
+       cex = 0.8) # The size of the legend text
+```
 :::
 
 

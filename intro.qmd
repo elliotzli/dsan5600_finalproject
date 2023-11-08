@@ -53,6 +53,8 @@ flowchart LR
   
 ```
 
+***
+
 ### Central Bank
 
 The Central Bank, widely acknowledged as a preeminent authority in the financial sector, exercises profound influence over the economy. In an era of global interconnectivity, even minute actions by central banks can reverberate across distant economies. Therefore, it is imperative to examine their roles, tools, and execution. Well-known central banks include **The Federal Reserve System (the Fed)**, the Bank of England, the European Central Bank (ECB).

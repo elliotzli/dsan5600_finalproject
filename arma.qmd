@@ -1,5 +1,454 @@
 ---
 title: "ARMA/ARIMA/SARIMA Models"
-format: html
+subtitle: "Stationarity, Differencing, Model Fitting, Diagotics, and Forcasting"
+format:   
+  html:
+    smooth-scroll: true
+    toc: true
+    code-fold: true
+    code-tools: true
+    embed-resources: true
+    mermaid:
+      theme: neutral
+bibliography: citation.bib
+execute: 
+  echo: false
+  warning: false
 ---
 
+```{r}
+library(zoo)
+library(TTR)
+library(readr)
+library(readxl)
+library(tidyverse)
+library(ggplot2)
+library(forecast)
+library(astsa) 
+library(xts)
+library(tseries)
+library(fpp2)
+library(fma)
+library(lubridate)
+library(TSstudio)
+library(quantmod)
+library(tidyquant)
+library(plotly)
+library(knitr)
+```
+
+## Economic Indicator
+
+I choose the `ARIMA` model for forecasting economic indicators because it's useful for forecasting a series where the data points are independent of the seasonal components, which is the case with the economic indicators such as `CPI`, `GDP`, ``` USD index,``unemployment rate ```, and `mortgage rate`. These indicators typically have underlying trends or cycles that ARIMA can address through differencing, making the data stationary before applying auto-regressive and moving average components to capture the relationships in the data.
+
+::: panel-tabset
+
+## CPI
+
+##### **Data Processing**
+
+------------------------------------------------------------------------
+
+```{r}
+df <- read_excel('data/data/cpi-u.xlsx')
+df <- na.omit(df)
+df$Date <- as.Date(df[[1]])
+df$Yield <- as.numeric(df[[2]])
+ts = ts(df$Yield, start=decimal_date(as.Date("1947-01-01")), frequency = 12)
+autoplot(ts) + ggtitle("CPI Over Time") + xlab("Year") + ylab("CPI") + 
+    theme(
+    panel.background = element_blank())
+```
+
+<br>
+
+##### **Stationarity Check**
+
+------------------------------------------------------------------------
+
+Initial assessments via `ACF` and `Augmented Dickey-Fuller` tests indicated that `CPI` required differencing due to non-stationarity. After converting to a time series and applying logarithmic transformation, first differencing was insufficient in detrending, but second differencing indicated stationarity.
+
+```{r}
+ggAcf(log(ts),40) + ggtitle("ACF Plot") + 
+    theme(
+    panel.background = element_blank())
+
+adf_test <- adf.test(ts)
+cat("Augmented Dickey-Fuller Test Results:\n")
+cat("Test Statistic:", adf_test$statistic, " ","P-value:", adf_test$p.value)
+if (adf_test$p.value < 0.05) {
+  cat("The time series is stationary based on the ADF test.\n")
+} else {
+  cat("The time series is not stationary based on the ADF test.\n")}
+
+ts <- log(ts)
+ts_diff <- ts %>% diff()
+ts_diff2 <- ts %>% diff() %>% diff()
+ggAcf(ts_diff,40) + ggtitle("ACF Plot After Differencing") + theme(panel.background = element_blank())
+ggPacf(ts_diff,40) + ggtitle("PACF Plot After Differencing") + theme(panel.background = element_blank())
+ggAcf(ts_diff2,40) + ggtitle("ACF Plot After Second Differencing") + theme(panel.background = element_blank())
+ggPacf(ts_diff2,40) + ggtitle("PACF Plot After Second Differencing") + theme(panel.background = element_blank())
+```
+
+<br>
+
+##### **Model Fitting**
+
+------------------------------------------------------------------------
+
+After second differencing `CPI`, ACF shows three lags, while PACF shows four. This suggests ARIMA parameters `p = [0,1,2,3]`, `d = [2]`, `q = [0,1,2]`. I'll test these for the lowest `AIC`, `BIC`, and `AICc`, and cross-check with `auto.arima` to forecasting.
+
+```{r}
+i=1
+
+temp= data.frame()
+ls=matrix(rep(NA,6*12),nrow=12)
+
+
+for (p in 0:3)
+{
+  for(q in 0:2)
+  {
+    for(d in 2)
+    {
+      
+      if(p+d+q<=8)
+      {
+        model<- Arima(ts,order=c(p,d,q),include.drift=TRUE)
+        ls[i,]= c(p,d,q,model$aic,model$bic,model$aicc)
+        i=i+1
+
+      }
+      
+    }
+  }
+}
+
+temp= as.data.frame(ls)
+names(temp)= c("p","d","q","AIC","BIC","AICc")
+
+temp
+
+aic_row <- paste("Model fitting with minimum AIC:\n", toString(temp[which.min(temp$AIC),]))
+aicc_row <- paste("\nModel fitting with minimum AICc:\n", toString(temp[which.min(temp$AICc),]))
+bic_row <- paste("\nModel fitting with minimum BIC:\n", toString(temp[which.min(temp$BIC),]))
+all_rows <- paste(aic_row, aicc_row, bic_row, sep="\n")
+cat(all_rows)
+
+auto.arima(ts)
+```
+
+<br>
+
+##### **Model Diagnostics**
+
+------------------------------------------------------------------------
+
+The `ARIMA(3,2,2)` model exhibits a satisfactory fit, evident from the patternless residuals and lack of autocorrelation, but its coefficients are not all statistically significant. In contrast, the `ARIMA(0,2,2)` model, while equally displaying white noise residuals and minimal autocorrelation, boasts statistically significant coefficients, lending greater weight to its predictive accuracy. The `SARIMA(1,2,1)(2,0,0)[12]` also presents a strong fit, confirmed by its residuals and significant p-values, and it outperforms the `ARIMA(0,2,2)` model in terms of lower AIC, BIC, and AICc values. Nonetheless, the simpler `ARIMA(0,2,2)` is preferred due to its adequate fit and less complexity. Both models are considered robust, with the choice between them hinging on the trade-off between simplicity and statistical thoroughness.
+
+```{r}
+# (3,2,2)
+model_output1 <- capture.output(sarima((ts),3,2,2))
+cat("\n**************************************************************************\n")
+# (0,2,2)
+model_output2 <- capture.output(sarima((ts),0,2,2))
+cat("\n**************************************************************************\n")
+# auto.arima (1,2,1)(2,0,0)[12] 
+model_output3 <- capture.output(sarima((ts),1,2,1,2,0,0,12))
+
+cat("\n**************************************************************************\n")
+cat("ARIMA(3,2,2):\n",model_output1,sep="\n")
+cat("\n**************************************************************************\n")
+cat("ARIMA(0,2,2):\n",model_output2,sep="\n")
+cat("\n**************************************************************************\n")
+cat("auto.arima (1,2,1)(2,0,0)[12]:\n",model_output3,sep="\n")
+cat("\n**************************************************************************\n")
+```
+
+```{r}
+fit <- Arima(ts, order=c(0,2,2))
+summary(fit)
+```
+
+<br>
+
+##### **Forecasting**
+
+------------------------------------------------------------------------
+
+The graph depicts the predicted logarithm of CPI over time, extending from historical data into future projections. The black line represents the actual historical log(CPI) values, showing a general upward trend over time, which indicates that the CPI has been increasing. The blue shaded area starting around 2020 represents the forecasted values, with the shade indicating the confidence interval of the predictions.
+
+```{r}
+ts %>%
+  Arima(order=c(0,2,2),include.drift = TRUE) %>%
+  forecast(h=60) %>%
+  autoplot() +
+  ylab("Prediction") + xlab("Year") + ggtitle("log(CPI) Prediction") + theme(panel.background = element_blank())
+```
+
+<br>
+
+##### **Benchmark Method**
+
+------------------------------------------------------------------------
+
+The ARIMA model forecasts (red line) are closest to the actual data, indicating a superior fit among the methods. Accuracy metrics support this, with ARIMA showing the lowest error rates across the board, suggesting high precision and minimal bias in forecasting. Other models like the Mean, Naive, and Seasonal Naive exhibit higher errors, indicating less accurate predictions. The Drift model performs better than these but is still outclassed by ARIMA. Overall, ARIMA is identified as the best model for forecasting CPI in this case.
+
+```{r}
+cat("ARIMA Model Accuracy Metrics:\n")
+pred <- forecast(fit, 60)
+acc_pred <- accuracy(pred)
+print(acc_pred)
+
+cat("\nMean Model Accuracy Metrics:\n")
+f1 <- meanf(ts, h=60)
+acc_f1 <- accuracy(f1)
+print(acc_f1)
+
+cat("\nNaive Model Accuracy Metrics:\n")
+f2 <- naive(ts, h=60)
+acc_f2 <- accuracy(f2)
+print(acc_f2)
+
+cat("\nSeasonal Naive Model Accuracy Metrics:\n")
+f3 <- snaive(ts, h=60)
+acc_f3 <- accuracy(f3)
+print(acc_f3)
+
+cat("\nRandom Walk with Drift Model Accuracy Metrics:\n")
+f4 <- rwf(ts, drift=TRUE, h=60)
+acc_f4 <- accuracy(f4)
+print(acc_f4)
+
+all_acc <- data.frame(
+  ARIMA = acc_pred[1, ],
+  Mean = acc_f1[1, ],
+  Naive = acc_f2[1, ],
+  SeasonalNaive = acc_f3[1, ],
+  Drift = acc_f4[1, ]
+)
+
+all_acc <- t(all_acc)
+lowest_scores <- apply(all_acc, 2, function(x) {
+  names(which.min(x))
+})
+cat("\nModel with the best Accuracy Metrics:\n",lowest_scores)
+
+autoplot(ts) +
+  autolayer(meanf(ts, h=60),
+            series="Mean", PI=FALSE) +
+  autolayer(naive(ts, h=60),
+            series="Naïve", PI=FALSE) +
+  autolayer(snaive(ts, h=60),
+            series="SNaïve", PI=FALSE)+
+  autolayer(rwf(ts, h=60, drift=TRUE),
+            series="Drift", PI=FALSE)+
+  autolayer(forecast(fit,60), 
+            series="ARIMA",PI=FALSE) +
+  guides(colour=guide_legend(title="Forecast")) +
+  ylab("Prediction") + xlab("Year") + ggtitle("Benchmark Evaluation") + theme(panel.background = element_blank())
+```
+
+## GDP
+
+##### **Data Processing**
+
+------------------------------------------------------------------------
+
+```{r}
+df <- read_excel('data/data/GDP.xlsx')
+df <- na.omit(df)
+df$Date <- as.Date(df[[1]])
+df$Yield <- as.numeric(df[[2]])
+ts = ts(df$Yield, start=decimal_date(as.Date("1947-01-01")), frequency = 4)
+autoplot(ts) + ggtitle("GDP Over Time") + xlab("Year") + ylab("GDP in billion") + 
+    theme(
+    panel.background = element_blank())
+```
+
+<br>
+
+##### **Stationarity Check**
+
+------------------------------------------------------------------------
+
+Initial assessments via `ACF` and `Augmented Dickey-Fuller` tests indicated that `GDP` required differencing due to non-stationarity. After converting to a time series and applying logarithmic transformation, first differencing was insufficient in detrending, but second differencing indicated stationarity.
+
+```{r}
+ggAcf(log(ts),40) + ggtitle("ACF Plot") + 
+    theme(
+    panel.background = element_blank())
+
+adf_test <- adf.test(ts)
+cat("Augmented Dickey-Fuller Test Results:\n")
+cat("Test Statistic:", adf_test$statistic, " ","P-value:", adf_test$p.value)
+if (adf_test$p.value < 0.05) {
+  cat("The time series is stationary based on the ADF test.\n")
+} else {
+  cat("The time series is not stationary based on the ADF test.\n")}
+
+ts <- log(ts)
+ts_diff <- ts %>% diff()
+ts_diff2 <- ts %>% diff() %>% diff()
+ggAcf(ts_diff,40) + ggtitle("ACF Plot After Differencing") + theme(panel.background = element_blank())
+ggPacf(ts_diff,40) + ggtitle("PACF Plot After Differencing") + theme(panel.background = element_blank())
+ggAcf(ts_diff2,40) + ggtitle("ACF Plot After Second Differencing") + theme(panel.background = element_blank())
+ggPacf(ts_diff2,40) + ggtitle("PACF Plot After Second Differencing") + theme(panel.background = element_blank())
+```
+
+<br>
+
+##### **Model Fitting**
+
+------------------------------------------------------------------------
+
+After second differencing `GDP`, ACF shows one significant lag, while PACF shows five. This suggests ARIMA parameters `p = [1,2,3,4,5]`, `d = [1,2]`, `q = [1]`. I'll test these for the lowest `AIC`, `BIC`, and `AICc`, and cross-check with `auto.arima` to forecasting.
+
+```{r}
+i=1
+
+temp= data.frame()
+ls=matrix(rep(NA,6*10),nrow=10)
+
+
+for (p in 1:5)
+{
+  for(q in 1)
+  {
+    for(d in 1:2)
+    {
+      
+      if(p+d+q<=8)
+      {
+        model<- Arima(ts,order=c(p,d,q),include.drift=TRUE)
+        ls[i,]= c(p,d,q,model$aic,model$bic,model$aicc)
+        i=i+1
+
+      }
+      
+    }
+  }
+}
+
+temp= as.data.frame(ls)
+names(temp)= c("p","d","q","AIC","BIC","AICc")
+
+temp
+
+aic_row <- paste("Model fitting with minimum AIC:\n", toString(temp[which.min(temp$AIC),]))
+aicc_row <- paste("\nModel fitting with minimum AICc:\n", toString(temp[which.min(temp$AICc),]))
+bic_row <- paste("\nModel fitting with minimum BIC:\n", toString(temp[which.min(temp$BIC),]))
+all_rows <- paste(aic_row, aicc_row, bic_row, sep="\n")
+cat(all_rows)
+
+auto.arima(ts)
+```
+
+<br>
+
+##### **Model Diagnostics**
+
+------------------------------------------------------------------------
+
+The first ARIMA model `(1,1,1)` shows a good fit with the lowest information criteria scores, indicating effective parameter use. The residuals suggest the model captures the data's underlying process well. The second model, which appears to be a SARIMA given the seasonal components, is more complex and doesn't offer a significantly better fit, as the information criteria scores are marginally higher and some coefficients are not statistically significant. The first model is preferable for its simplicity and performance.
+
+```{r}
+# (1,1,1)
+model_output1 <- capture.output(sarima((ts),1,1,1))
+cat("\n**************************************************************************\n")
+# auto.arima (0,2,3)(1,0,1)[4]
+model_output2 <- capture.output(sarima((ts),0,2,3,1,0,1,4))
+
+cat("\n**************************************************************************\n")
+cat("ARIMA(1,1,1):\n",model_output1,sep="\n")
+cat("\n**************************************************************************\n")
+cat("auto.arima (0,2,3)(1,0,1)[4]:\n",model_output2,sep="\n")
+cat("\n**************************************************************************\n")
+```
+
+```{r}
+fit <- Arima(ts, order=c(1,1,1))
+summary(fit)
+```
+
+<br>
+
+##### **Forecasting**
+
+------------------------------------------------------------------------
+
+The forecast shows a projected increase in the log-transformed GDP, with historical data indicating a good model fit. The widening confidence intervals suggest greater uncertainty in the longer term. While useful for economic planning, these predictions rely on past trends continuing unchanged and may not account for unforeseen economic events.
+
+```{r}
+ts %>%
+  Arima(order=c(1,1,1),include.drift = TRUE) %>%
+  forecast(h=60) %>%
+  autoplot() +
+  ylab("Prediction") + xlab("Year") + ggtitle("log(GDP) Prediction") + theme(panel.background = element_blank())
+```
+
+<br>
+
+##### **Benchmark Method**
+
+------------------------------------------------------------------------
+
+The ARIMA model seems to closely follow the actual trend, along with the Drift model. The other models---Mean, Naive, and Seasonal Naive---diverge from the actual trend as time progresses, indicating less accuracy.
+
+From the accuracy metrics given, the ARIMA model outperforms the others with the lowest errors across multiple measures (RMSE, MAE, MPE, MAPE, MASE, and ACF1). The Mean Model performs the worst, with the highest errors. The Naive and Seasonal Naive models also show higher errors than ARIMA but are better than the Mean Model. The Random Walk with Drift Model has metrics comparable to the ARIMA model, suggesting it is also a good fit for the data. Overall, the ARIMA and Drift models are indicated as the best for this dataset based on the provided metrics.
+
+```{r}
+cat("ARIMA Model Accuracy Metrics:\n")
+pred <- forecast(fit, 60)
+acc_pred <- accuracy(pred)
+print(acc_pred)
+
+cat("\nMean Model Accuracy Metrics:\n")
+f1 <- meanf(ts, h=60)
+acc_f1 <- accuracy(f1)
+print(acc_f1)
+
+cat("\nNaive Model Accuracy Metrics:\n")
+f2 <- naive(ts, h=60)
+acc_f2 <- accuracy(f2)
+print(acc_f2)
+
+cat("\nSeasonal Naive Model Accuracy Metrics:\n")
+f3 <- snaive(ts, h=60)
+acc_f3 <- accuracy(f3)
+print(acc_f3)
+
+cat("\nRandom Walk with Drift Model Accuracy Metrics:\n")
+f4 <- rwf(ts, drift=TRUE, h=60)
+acc_f4 <- accuracy(f4)
+print(acc_f4)
+
+all_acc <- data.frame(
+  ARIMA = acc_pred[1, ],
+  Mean = acc_f1[1, ],
+  Naive = acc_f2[1, ],
+  SeasonalNaive = acc_f3[1, ],
+  Drift = acc_f4[1, ]
+)
+
+all_acc <- t(all_acc)
+lowest_scores <- apply(all_acc, 2, function(x) {
+  names(which.min(x))
+})
+cat("\nModel with the best Accuracy Metrics:\n",lowest_scores)
+
+autoplot(ts) +
+  autolayer(meanf(ts, h=60),
+            series="Mean", PI=FALSE) +
+  autolayer(naive(ts, h=60),
+            series="Naïve", PI=FALSE) +
+  autolayer(snaive(ts, h=60),
+            series="SNaïve", PI=FALSE)+
+  autolayer(rwf(ts, h=60, drift=TRUE),
+            series="Drift", PI=FALSE)+
+  autolayer(forecast(fit,60), 
+            series="ARIMA",PI=FALSE) +
+  guides(colour=guide_legend(title="Forecast")) +
+  ylab("Prediction") + xlab("Year") + ggtitle("Benchmark Evaluation") + theme(panel.background = element_blank())
+```
+:::
