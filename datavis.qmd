@@ -12,7 +12,8 @@ format:
       theme: neutral
 bibliography: citation.bib
 execute: 
-  echo: true
+  echo: false
+  warning: false
 ---
 ## Short-Term Treasury Bill Movements and Federal Funds Rate Spreads
 

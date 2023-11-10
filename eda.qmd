@@ -1158,19 +1158,3 @@ legend("bottomright", # Position of the legend
        cex = 0.8) # The size of the legend text
 ```
 :::
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

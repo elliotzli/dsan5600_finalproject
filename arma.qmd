@@ -1,6 +1,6 @@
 ---
 title: "ARMA/ARIMA/SARIMA Models"
-subtitle: "Stationarity, Differencing, Model Fitting, Diagotics, and Forcasting"
+subtitle: "Stationarity, Differencing, Model Fitting, Diagnostics, Forcasting, and Validation"
 format:   
   html:
     smooth-scroll: true
@@ -37,12 +37,11 @@ library(plotly)
 library(knitr)
 ```
 
-## Economic Indicator
+## ARIMA - Economic Indicator
 
 I choose the `ARIMA` model for forecasting economic indicators because it's useful for forecasting a series where the data points are independent of the seasonal components, which is the case with the economic indicators such as `CPI`, `GDP`, `USD index`, `unemployment rate`, and `mortgage rate`. These indicators typically have underlying trends or cycles that ARIMA can address through differencing, making the data stationary before applying auto-regressive and moving average components to capture the relationships in the data.
 
 ::: panel-tabset
-
 ## CPI
 
 ##### **Data Processing**
@@ -169,6 +168,12 @@ cat("\n*************************************************************************
 fit <- Arima(ts, order=c(0,2,2))
 summary(fit)
 ```
+
+<br>
+
+Equation for `ARIMA(0,2,2)`v:
+
+$$(1 - B)^2 X_t = (1 + \theta_1 B + \theta_2 B^2) W_t$$ <br>
 
 <br>
 
@@ -373,6 +378,12 @@ summary(fit)
 
 <br>
 
+Equation for `ARIMA(1,1,1)`:
+
+$$(1 - \phi B)(1 - B)X_t = (1 + \theta B)W_t$$
+
+<br>
+
 ##### **Forecasting**
 
 ------------------------------------------------------------------------
@@ -450,5 +461,631 @@ autoplot(ts) +
             series="ARIMA",PI=FALSE) +
   guides(colour=guide_legend(title="Forecast")) +
   ylab("Prediction") + xlab("Year") + ggtitle("Benchmark Evaluation") + theme(panel.background = element_blank())
+```
+:::
+
+## SARIMA - Treasury Security
+
+`SARIMA` models are used for treasury yields like 3-month T-bills or 20-year T-bonds because they help predict the regular ups and downs that happen throughout the year. These ups and downs can be due to when the government borrows more, changes in how often people invest, and rules that banks follow at certain times. SARIMA can catch these patterns, making it easier to guess where yields will go next, which is very important for people who invest in these securities.
+
+::: panel-tabset
+## 3 Month Treasury Bill
+
+##### **Data Processing**
+
+------------------------------------------------------------------------
+
+```{r}
+df <- read_excel('data/data/3-mon-t-bill-rate.xlsx')
+df <- na.omit(df)
+df$Date <- as.Date(df[[1]])
+df$Yield <- as.numeric(df[[2]])
+
+df$Quarter <- floor_date(df$Date, "quarter")
+df1 <- df %>%
+  group_by(Quarter) %>%
+  summarize(AverageYield = mean(Yield))
+df1$Quarter <- format(df1$Quarter)
+
+
+ts <- ts(df1$AverageYield, start=c(1982, 1), frequency=4)
+autoplot(ts) +
+  ggtitle("3 Month Treasury Yield Over Time - Quarterly Data") +
+  xlab("Year") +
+  ylab("Quarterly Yield") +
+  theme(panel.background = element_blank())
+```
+
+<br>
+
+##### **Stationarity Check**
+
+------------------------------------------------------------------------
+
+Initial assessments via `ACF` and `Augmented Dickey-Fuller` tests indicated that `3Mon T-Bill Yield` required differencing due to non-stationarity. After converting to a time series, first differencing and seasonal differencing alone were insufficient in detrending, but the combination of non-seasonal and seaonal differencing indicated strong stationarity.
+
+```{r}
+ggAcf(ts,40) + ggtitle("ACF Plot") + 
+    theme(
+    panel.background = element_blank())
+
+plot(decompose(ts))
+
+adf_test <- adf.test(ts)
+cat("Augmented Dickey-Fuller Test Results:\n")
+cat("Test Statistic:", adf_test$statistic, " ","P-value:", adf_test$p.value)
+if (adf_test$p.value < 0.05) {
+  cat("The time series is stationary based on the ADF test.\n")
+} else {
+  cat("The time series is not stationary based on the ADF test.\n")}
+
+ts_diff <- ts %>% diff()
+ggAcf(ts_diff,40) + ggtitle("ACF Plot After Differencing") + theme(panel.background = element_blank())
+ggPacf(ts_diff,40) + ggtitle("PACF Plot After Differencing") + theme(panel.background = element_blank())
+
+ts_sdiff <- ts %>% diff(lag=4)
+ggAcf(ts_sdiff,40) + ggtitle("ACF Plot After Seasonal Differencing") + theme(panel.background = element_blank())
+ggPacf(ts_sdiff,40) + ggtitle("PACF Plot After Seasonal Differencing") + theme(panel.background = element_blank())
+
+ts_diff2 <- ts %>% diff() %>% diff(lag=4)
+ggAcf(ts_diff2,40) + ggtitle("ACF Plot After Second Differencing") + theme(panel.background = element_blank())
+ggPacf(ts_diff2,40) + ggtitle("PACF Plot After Second Differencing") + theme(panel.background = element_blank())
+```
+
+<br>
+
+##### **Model Fitting**
+
+------------------------------------------------------------------------
+
+After second differencing `3 Month T-Bill Yield`, ACF shows three lags, while PACF shows four. This suggests ARIMA parameters `p = [0,1,2,3]`, `P = [2]`, `d = [1]`, `[D = 1]`, `q = [0,1,2], Q = [1]`. I'll test these for the lowest `AIC`, `BIC`, and `AICc`, and cross-check with `auto.arima` to forecasting.
+
+```{r}
+SARIMA.c=function(p1,p2,q1,q2,P1,P2,Q1,Q2,data){
+  
+  d=1
+  D=1
+  s=12
+  i=1
+  temp= data.frame()
+  ls=matrix(rep(NA,9*35),nrow=35)
+
+  for (p in p1:p2)
+  {
+    for(q in q1:q2)
+    {
+      for(P in P1:P2)
+      {
+        for(Q in Q1:Q2)
+        {
+          if(p+d+q+P+D+Q<=9)
+          {
+            model<- Arima(data,order=c(p,d,q),seasonal=c(P,D,Q))
+            ls[i,]= c(p,d,q,P,D,Q,model$aic,model$bic,model$aicc)
+            i=i+1
+          }
+        }
+      }
+    }
+  }
+  temp= as.data.frame(ls)
+  names(temp)= c("p","d","q","P","D","Q","AIC","BIC","AICc")
+  temp
+}
+
+output=SARIMA.c(p1=0,p2=3,q1=0,q2=3,P1=2,P2=2,Q1=1,Q2=1,data=ts)
+
+min_aic_info <- paste("Minimum AIC:", toString(output[which.min(output$AIC), ]))
+min_bic_info <- paste("Minimum BIC:", toString(output[which.min(output$BIC), ]))
+min_aicc_info <- paste("Minimum AICc:", toString(output[which.min(output$AICc), ]))
+
+cat(min_aic_info, "\n")
+cat(min_bic_info, "\n")
+cat(min_aicc_info, "\n")
+
+auto.arima(ts)
+```
+
+<br>
+
+##### **Model Diagnostics**
+
+------------------------------------------------------------------------
+
+<!-- xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx -->
+
+```{r}
+model_output1 <- capture.output(sarima((ts),1, 1, 1, 2, 1, 1, 4))
+model_output1[67:97]
+```
+
+```{r}
+model_output2 <- capture.output(sarima((ts),3, 1, 0, 2, 0, 0, 4))
+model_output2[25:56]
+```
+
+```{r}
+fit <- Arima(ts,order=c(1,1,1), seasonal=c(2,1,1))
+summary(fit)
+```
+
+<br>
+
+Equation for `SARIMA(1,1,1)(2,1,1)[4]`:
+
+$$(1 - \phi B)(1 - B)(1 - \Phi_1 B^s)(1 - \Phi_2 B^{2s})(1 - B^s)X_t = (1 + \theta B)(1 + \Theta_1 B^s)W_t$$
+
+<br>
+
+##### **Forecasting**
+
+------------------------------------------------------------------------
+
+<!-- xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx -->
+
+```{r}
+fit %>%
+  forecast(h=12) %>%
+  autoplot() +
+  ylab("Prediction") + xlab("Year") + ggtitle("3 Month Treasury Yield Over Time - Quarterly Data Prediction") + theme(panel.background = element_blank())
+```
+
+<br>
+
+##### **Benchmark Method**
+
+------------------------------------------------------------------------
+
+<!-- xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx -->
+
+```{r}
+cat("SARIMA Model Accuracy Metrics:\n")
+pred <- forecast(fit, 12)
+acc_pred <- accuracy(pred)
+print(acc_pred)
+
+cat("\nMean Model Accuracy Metrics:\n")
+f1 <- meanf(ts, h=12)
+acc_f1 <- accuracy(f1)
+print(acc_f1)
+
+cat("\nNaive Model Accuracy Metrics:\n")
+f2 <- naive(ts, h=12)
+acc_f2 <- accuracy(f2)
+print(acc_f2)
+
+cat("\nSeasonal Naive Model Accuracy Metrics:\n")
+f3 <- snaive(ts, h=12)
+acc_f3 <- accuracy(f3)
+print(acc_f3)
+
+cat("\nRandom Walk with Drift Model Accuracy Metrics:\n")
+f4 <- rwf(ts, drift=TRUE, h=12)
+acc_f4 <- accuracy(f4)
+print(acc_f4)
+
+all_acc <- data.frame(
+  SARIMA = acc_pred[1, ],
+  Mean = acc_f1[1, ],
+  Naive = acc_f2[1, ],
+  SeasonalNaive = acc_f3[1, ],
+  Drift = acc_f4[1, ]
+)
+
+all_acc <- t(all_acc)
+lowest_scores <- apply(all_acc, 2, function(x) {
+  names(which.min(x))
+})
+cat("\nModel with the best Accuracy Metrics:\n",lowest_scores)
+
+autoplot(ts) +
+  autolayer(meanf(ts, h=12),
+            series="Mean", PI=FALSE) +
+  autolayer(naive(ts, h=12),
+            series="Naïve", PI=FALSE) +
+  autolayer(snaive(ts, h=12),
+            series="SNaïve", PI=FALSE)+
+  autolayer(rwf(ts, h=12, drift=TRUE),
+            series="Drift", PI=FALSE)+
+  autolayer(forecast(fit,12), 
+            series="SARIMA",PI=FALSE) +
+  guides(colour=guide_legend(title="Forecast")) +
+  ylab("Prediction") + xlab("Year") + ggtitle("Benchmark Evaluation") + theme(panel.background = element_blank())
+```
+
+<br>
+
+**Cross Validation**
+
+<!-- xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx -->
+
+```{r}
+split_index <- floor(length(ts) * 0.4)
+train_size <- split_index
+test_size <- length(ts) - split_index
+errors <- data.frame(err1=rep(NA, test_size), err2=rep(NA, test_size), err3=rep(NA, test_size), err4=rep(NA, test_size))
+
+for(i in 1:test_size) {
+  xtrain <- ts[1:(train_size+i-1)]
+  xtest <- ts[train_size+i]
+  
+  fit1 <- Arima(xtrain, order=c(1,1,1), seasonal=list(order=c(2,1,1), period=4), include.drift=FALSE, method="ML")
+  fcast1 <- forecast(fit1, h=1) 
+  
+  fit2 <- Arima(xtrain, order=c(3,1,0), seasonal=list(order=c(2,0,0), period=4), include.drift=FALSE, method="ML")
+  fcast2 <- forecast(fit2, h=1) 
+  
+  errors$err1[i] <- abs(fcast1$mean - xtest) 
+  errors$err2[i] <- abs(fcast2$mean - xtest) 
+  errors$err3[i] <- (fcast1$mean - xtest)^2 
+  errors$err4[i] <- (fcast2$mean - xtest)^2 
+}
+
+MAE1 <- mean(errors$err1, na.rm = TRUE)
+MAE2 <- mean(errors$err2, na.rm = TRUE)
+MSE1 <- mean(errors$err3, na.rm = TRUE)
+MSE2 <- mean(errors$err4, na.rm = TRUE)
+
+cat("One-Step Ahead Cross Validation\n")
+cat("Model 1 - MAE:", MAE1, "MSE:", MSE1, "\n")
+cat("Model 2 - MAE:", MAE2, "MSE:", MSE2, "\n")
+
+if (MAE1 < MAE2 && MSE1 < MSE2) {
+  cat("Model 1 performs better on both MAE and MSE.\n")
+} else if (MAE1 < MAE2) {
+  cat("Model 1 has a lower MAE but not necessarily a lower MSE.\n")
+} else if (MSE1 < MSE2) {
+  cat("Model 1 has a lower MSE but not necessarily a lower MAE.\n")
+} else {
+  cat("Model 2 performs better on both MAE and MSE.\n")
+}
+```
+
+```{r}
+n <- length(ts)
+forecast_horizon <- 4
+split_index <- floor(n * 0.4)
+train_size <- split_index
+test_size <- n - split_index
+
+mae1 <- matrix(NA, test_size, forecast_horizon)
+mae2 <- matrix(NA, test_size, forecast_horizon)
+st <- tsp(ts)[1] + (train_size - 1) / frequency(ts)
+
+for(i in 1:test_size) {
+  xtrain <- window(ts, end=st + (i-1)/frequency(ts))
+  xtest <- window(ts, start=st + i/frequency(ts), end=st + (i+forecast_horizon-1)/frequency(ts))
+
+  if (length(xtest) < forecast_horizon) {
+    next 
+  }
+  
+  fit1 <- Arima(xtrain, order=c(1,1,1), seasonal=list(order=c(2,1,1), period=frequency(ts)),
+                include.drift=FALSE, method="ML")
+  fcast1 <- forecast(fit1, h=forecast_horizon)
+  
+  fit2 <- Arima(xtrain, order=c(3,1,0), seasonal=list(order=c(2,0,0), period=frequency(ts)),
+                include.drift=FALSE, method="ML")
+  fcast2 <- forecast(fit2, h=forecast_horizon)
+  
+  mae1[i, ] <- abs(fcast1$mean - xtest)
+  mae2[i, ] <- abs(fcast2$mean - xtest)
+}
+
+plot(1:forecast_horizon, colMeans(mae1, na.rm=TRUE), type="l", col=2, xlab="Horizon", ylab="MAE", ylim=c(0, max(c(colMeans(mae1, na.rm=TRUE), colMeans(mae2, na.rm=TRUE)))))
+lines(1:forecast_horizon, colMeans(mae2, na.rm=TRUE), type="l", col=3)
+legend("topleft", legend=c("M1", "M2"), col=2:3, lty=1)
+```
+
+## 6 Month Treasury Bill
+
+##### **Data Processing**
+
+------------------------------------------------------------------------
+
+```{r}
+df <- read_excel('data/data/6-mon-t-bill-rate.xlsx')
+df <- na.omit(df)
+df$Date <- as.Date(df[[1]])
+df$Yield <- as.numeric(df[[2]])
+
+df$Quarter <- floor_date(df$Date, "quarter")
+df1 <- df %>%
+  group_by(Quarter) %>%
+  summarize(AverageYield = mean(Yield))
+df1$Quarter <- format(df1$Quarter)
+
+
+ts <- ts(df1$AverageYield, start=c(1982, 1), frequency=4)
+autoplot(ts) +
+  ggtitle("6 Month Treasury Yield Over Time - Quarterly Data") +
+  xlab("Year") +
+  ylab("Quarterly Yield") +
+  theme(panel.background = element_blank())
+```
+
+<br>
+
+##### **Stationarity Check**
+
+------------------------------------------------------------------------
+
+<!-- xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx -->
+
+```{r}
+ggAcf(ts,40) + ggtitle("ACF Plot") + 
+    theme(
+    panel.background = element_blank())
+
+plot(decompose(ts))
+
+adf_test <- adf.test(ts)
+cat("Augmented Dickey-Fuller Test Results:\n")
+cat("Test Statistic:", adf_test$statistic, " ","P-value:", adf_test$p.value)
+if (adf_test$p.value < 0.05) {
+  cat("The time series is stationary based on the ADF test.\n")
+} else {
+  cat("The time series is not stationary based on the ADF test.\n")}
+
+ts_diff <- ts %>% diff()
+ggAcf(ts_diff,40) + ggtitle("ACF Plot After Differencing") + theme(panel.background = element_blank())
+ggPacf(ts_diff,40) + ggtitle("PACF Plot After Differencing") + theme(panel.background = element_blank())
+
+ts_sdiff <- ts %>% diff(lag=4)
+ggAcf(ts_sdiff,40) + ggtitle("ACF Plot After Seasonal Differencing") + theme(panel.background = element_blank())
+ggPacf(ts_sdiff,40) + ggtitle("PACF Plot After Seasonal Differencing") + theme(panel.background = element_blank())
+
+ts_diff2 <- ts %>% diff() %>% diff(lag=4)
+ggAcf(ts_diff2,40) + ggtitle("ACF Plot After Second Differencing") + theme(panel.background = element_blank())
+ggPacf(ts_diff2,40) + ggtitle("PACF Plot After Second Differencing") + theme(panel.background = element_blank())
+```
+
+<br>
+
+##### **Model Fitting**
+
+------------------------------------------------------------------------
+
+<!-- xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx -->
+
+```{r}
+SARIMA.c=function(p1,p2,q1,q2,P1,P2,Q1,Q2,data){
+  
+  d=1
+  D=1
+  s=12
+  i=1
+  temp= data.frame()
+  ls=matrix(rep(NA,9*35),nrow=35)
+
+  for (p in p1:p2)
+  {
+    for(q in q1:q2)
+    {
+      for(P in P1:P2)
+      {
+        for(Q in Q1:Q2)
+        {
+          if(p+d+q+P+D+Q<=9)
+          {
+            model<- Arima(data,order=c(p,d,q),seasonal=c(P,D,Q))
+            ls[i,]= c(p,d,q,P,D,Q,model$aic,model$bic,model$aicc)
+            i=i+1
+          }
+        }
+      }
+    }
+  }
+  temp= as.data.frame(ls)
+  names(temp)= c("p","d","q","P","D","Q","AIC","BIC","AICc")
+  temp
+}
+
+output=SARIMA.c(p1=0,p2=3,q1=0,q2=3,P1=2,P2=2,Q1=1,Q2=1,data=ts)
+
+min_aic_info <- paste("Minimum AIC:", toString(output[which.min(output$AIC), ]))
+min_bic_info <- paste("Minimum BIC:", toString(output[which.min(output$BIC), ]))
+min_aicc_info <- paste("Minimum AICc:", toString(output[which.min(output$AICc), ]))
+
+cat(min_aic_info, "\n")
+cat(min_bic_info, "\n")
+cat(min_aicc_info, "\n")
+
+auto.arima(ts)
+```
+
+<br>
+
+##### **Model Diagnostics**
+
+------------------------------------------------------------------------
+
+<!-- xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx -->
+
+```{r}
+model_output1 <- capture.output(sarima((ts),0, 1, 0, 2, 0, 0, 4))
+model_output1
+```
+
+```{r}
+model_output2 <- capture.output(sarima((ts),2, 1, 2, 2, 1, 1, 4))
+model_output2
+```
+
+```{r}
+model_output3 <- capture.output(sarima((ts),1, 1, 1, 2, 1, 1, 4))
+model_output3
+```
+
+```{r}
+fit <- Arima(ts,order=c(2,1,2), seasonal=c(2,1,1))
+summary(fit)
+```
+
+<br>
+
+Equation for `SARIMA(2,1,2)(2,1,1)[4]`:
+
+$$(1 - \phi_1 B - \phi_2 B^2)(1 - B)(1 - \Phi_1 B^s - \Phi_2 B^{2s})(1 - B^s)X_t = (1 + \theta_1 B + \theta_2 B^2)(1 + \Theta_1 B^s)W_t$$
+
+<br>
+
+##### **Forecasting**
+
+------------------------------------------------------------------------
+
+<!-- xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx -->
+
+```{r}
+fit %>%
+  forecast(h=12) %>%
+  autoplot() +
+  ylab("Prediction") + xlab("Year") + ggtitle("6 Month Treasury Yield Over Time - Quarterly Data Prediction") + theme(panel.background = element_blank())
+```
+
+<br>
+
+##### **Benchmark Method**
+
+------------------------------------------------------------------------
+
+<!-- xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx -->
+
+```{r}
+cat("SARIMA Model Accuracy Metrics:\n")
+pred <- forecast(fit, 12)
+acc_pred <- accuracy(pred)
+print(acc_pred)
+
+cat("\nMean Model Accuracy Metrics:\n")
+f1 <- meanf(ts, h=12)
+acc_f1 <- accuracy(f1)
+print(acc_f1)
+
+cat("\nNaive Model Accuracy Metrics:\n")
+f2 <- naive(ts, h=12)
+acc_f2 <- accuracy(f2)
+print(acc_f2)
+
+cat("\nSeasonal Naive Model Accuracy Metrics:\n")
+f3 <- snaive(ts, h=12)
+acc_f3 <- accuracy(f3)
+print(acc_f3)
+
+cat("\nRandom Walk with Drift Model Accuracy Metrics:\n")
+f4 <- rwf(ts, drift=TRUE, h=12)
+acc_f4 <- accuracy(f4)
+print(acc_f4)
+
+all_acc <- data.frame(
+  SARIMA = acc_pred[1, ],
+  Mean = acc_f1[1, ],
+  Naive = acc_f2[1, ],
+  SeasonalNaive = acc_f3[1, ],
+  Drift = acc_f4[1, ]
+)
+
+all_acc <- t(all_acc)
+lowest_scores <- apply(all_acc, 2, function(x) {names(which.min(x))})
+cat("\nModel with the best Accuracy Metrics:\n",lowest_scores)
+
+autoplot(ts) +
+  autolayer(meanf(ts, h=12),
+            series="Mean", PI=FALSE) +
+  autolayer(naive(ts, h=12),
+            series="Naïve", PI=FALSE) +
+  autolayer(snaive(ts, h=12),
+            series="SNaïve", PI=FALSE)+
+  autolayer(rwf(ts, h=12, drift=TRUE),
+            series="Drift", PI=FALSE)+
+  autolayer(forecast(fit,12), 
+            series="SARIMA",PI=FALSE) +
+  guides(colour=guide_legend(title="Forecast")) +
+  ylab("Prediction") + xlab("Year") + ggtitle("Benchmark Evaluation") + theme(panel.background = element_blank())
+```
+
+<br>
+
+**Cross Validation**
+
+<!-- xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx -->
+
+```{r}
+split_index <- floor(length(ts) * 0.4)
+train_size <- split_index
+test_size <- length(ts) - split_index
+errors <- data.frame(err1=rep(NA, test_size), err2=rep(NA, test_size), err3=rep(NA, test_size), err4=rep(NA, test_size))
+
+for(i in 1:test_size) {
+  xtrain <- ts[1:(train_size+i-1)]
+  xtest <- ts[train_size+i]
+  
+  fit1 <- Arima(xtrain, order=c(2,1,2), seasonal=list(order=c(2,1,1), period=4), include.drift=FALSE, method="ML")
+  fcast1 <- forecast(fit1, h=1) 
+
+
+  fit2 <- Arima(xtrain, order=c(1,1,1), seasonal=list(order=c(2,1,1), period=4), include.drift=FALSE, method="ML")
+  fcast2 <- forecast(fit2, h=1) 
+  
+  errors$err1[i] <- abs(fcast1$mean - xtest) 
+  errors$err2[i] <- abs(fcast2$mean - xtest) 
+  errors$err3[i] <- (fcast1$mean - xtest)^2 
+  errors$err4[i] <- (fcast2$mean - xtest)^2 
+}
+
+MAE1 <- mean(errors$err1, na.rm = TRUE)
+MAE2 <- mean(errors$err2, na.rm = TRUE)
+MSE1 <- mean(errors$err3, na.rm = TRUE)
+MSE2 <- mean(errors$err4, na.rm = TRUE)
+
+cat("One-Step Ahead Cross Validation\n")
+cat("Model 1 - MAE:", MAE1, "MSE:", MSE1, "\n")
+cat("Model 2 - MAE:", MAE2, "MSE:", MSE2, "\n")
+
+if (MAE1 < MAE2 && MSE1 < MSE2) {
+  cat("Model 1 performs better on both MAE and MSE.\n")
+} else if (MAE1 < MAE2) {
+  cat("Model 1 has a lower MAE but not necessarily a lower MSE.\n")
+} else if (MSE1 < MSE2) {
+  cat("Model 1 has a lower MSE but not necessarily a lower MAE.\n")
+} else {
+  cat("Model 2 performs better on both MAE and MSE.\n")
+}
+```
+
+```{r}
+n <- length(ts)
+forecast_horizon <- 4
+split_index <- floor(n * 0.4)
+train_size <- split_index
+test_size <- n - split_index
+
+mae1 <- matrix(NA, test_size, forecast_horizon)
+mae2 <- matrix(NA, test_size, forecast_horizon)
+st <- tsp(ts)[1] + (train_size - 1) / frequency(ts)
+
+for(i in 1:test_size) {
+  xtrain <- window(ts, end=st + (i-1)/frequency(ts))
+  xtest <- window(ts, start=st + i/frequency(ts), end=st + (i+forecast_horizon-1)/frequency(ts))
+
+  if (length(xtest) < forecast_horizon) {
+    next 
+  }
+  
+  fit1 <- Arima(xtrain, order=c(2,1,2), seasonal=list(order=c(2,1,1), period=frequency(ts)),
+                include.drift=FALSE, method="ML")
+  fcast1 <- forecast(fit1, h=forecast_horizon)
+  
+  fit2 <- Arima(xtrain, order=c(1,1,1), seasonal=list(order=c(2,1,1), period=frequency(ts)),
+                include.drift=FALSE, method="ML")
+  fcast2 <- forecast(fit2, h=forecast_horizon)
+  
+  mae1[i, ] <- abs(fcast1$mean - xtest)
+  mae2[i, ] <- abs(fcast2$mean - xtest)
+}
+
+plot(1:forecast_horizon, colMeans(mae1, na.rm=TRUE), type="l", col=2, xlab="Horizon", ylab="MAE", ylim=c(0, max(c(colMeans(mae1, na.rm=TRUE), colMeans(mae2, na.rm=TRUE)))))
+lines(1:forecast_horizon, colMeans(mae2, na.rm=TRUE), type="l", col=3)
+legend("topleft", legend=c("M1", "M2"), col=2:3, lty=1)
 ```
 :::

@@ -11,7 +11,8 @@ format:
       theme: neutral
 bibliography: citation.bib
 execute: 
-  echo: true
+  echo: false
+  warning: false
 ---
 ```{mermaid}
 flowchart LR
