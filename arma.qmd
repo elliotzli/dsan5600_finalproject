@@ -1,5 +1,5 @@
 ---
-title: "ARMA/ARIMA/SARIMA Models"
+title: "ARMA/ARIMA/SARIMA"
 subtitle: "Stationarity, Differencing, Model Fitting, Diagnostics, Forcasting, and Validation"
 format:   
   html:
@@ -37,16 +37,11 @@ library(plotly)
 library(knitr)
 ```
 
-## ARIMA - Economic Indicator
+## ARIMA - CPI
 
 I choose the `ARIMA` model for forecasting economic indicators because it's useful for forecasting a series where the data points are independent of the seasonal components, which is the case with the economic indicators such as `CPI`, `GDP`, `USD index`, `unemployment rate`, and `mortgage rate`. These indicators typically have underlying trends or cycles that ARIMA can address through differencing, making the data stationary before applying auto-regressive and moving average components to capture the relationships in the data.
 
-::: panel-tabset
-## CPI
-
-##### **Data Processing**
-
-------------------------------------------------------------------------
+### Data Processing
 
 ```{r}
 df <- read_excel('data/data/cpi-u.xlsx')
@@ -61,9 +56,7 @@ autoplot(ts) + ggtitle("CPI Over Time") + xlab("Year") + ylab("CPI") +
 
 <br>
 
-##### **Stationarity Check**
-
-------------------------------------------------------------------------
+### Stationarity Check
 
 Initial assessments via `ACF` and `Augmented Dickey-Fuller` tests indicated that `CPI` required differencing due to non-stationarity. After converting to a time series and applying logarithmic transformation, first differencing was insufficient in detrending, but second differencing indicated stationarity.
 
@@ -79,7 +72,7 @@ if (adf_test$p.value < 0.05) {
   cat("The time series is stationary based on the ADF test.\n")
 } else {
   cat("The time series is not stationary based on the ADF test.\n")}
-
+cat("\n********************************************************************************************\n")
 ts <- log(ts)
 ts_diff <- ts %>% diff()
 ts_diff2 <- ts %>% diff() %>% diff()
@@ -91,9 +84,7 @@ ggPacf(ts_diff2,40) + ggtitle("PACF Plot After Second Differencing") + theme(pan
 
 <br>
 
-##### **Model Fitting**
-
-------------------------------------------------------------------------
+### Model Fitting
 
 After second differencing `CPI`, ACF shows three lags, while PACF shows four. This suggests ARIMA parameters `p = [0,1,2,3]`, `d = [2]`, `q = [0,1,2]`. I'll test these for the lowest `AIC`, `BIC`, and `AICc`, and cross-check with `auto.arima` to forecasting.
 
@@ -113,7 +104,7 @@ for (p in 0:3)
       
       if(p+d+q<=8)
       {
-        model<- Arima(ts,order=c(p,d,q),include.drift=TRUE)
+        model<- Arima(ts,order=c(p,d,q))
         ls[i,]= c(p,d,q,model$aic,model$bic,model$aicc)
         i=i+1
 
@@ -125,44 +116,45 @@ for (p in 0:3)
 
 temp= as.data.frame(ls)
 names(temp)= c("p","d","q","AIC","BIC","AICc")
-
-temp
-
 aic_row <- paste("Model fitting with minimum AIC:\n", toString(temp[which.min(temp$AIC),]))
 aicc_row <- paste("\nModel fitting with minimum AICc:\n", toString(temp[which.min(temp$AICc),]))
 bic_row <- paste("\nModel fitting with minimum BIC:\n", toString(temp[which.min(temp$BIC),]))
 all_rows <- paste(aic_row, aicc_row, bic_row, sep="\n")
 cat(all_rows)
+```
 
+**auto.arima**
+
+```{r}
 auto.arima(ts)
 ```
 
 <br>
 
-##### **Model Diagnostics**
-
-------------------------------------------------------------------------
+### Model Diagnostics
 
 The `ARIMA(3,2,2)` model exhibits a satisfactory fit, evident from the patternless residuals and lack of autocorrelation, but its coefficients are not all statistically significant. In contrast, the `ARIMA(0,2,2)` model, while equally displaying white noise residuals and minimal autocorrelation, boasts statistically significant coefficients, lending greater weight to its predictive accuracy. The `SARIMA(1,2,1)(2,0,0)[12]` also presents a strong fit, confirmed by its residuals and significant p-values, and it outperforms the `ARIMA(0,2,2)` model in terms of lower AIC, BIC, and AICc values. Nonetheless, the simpler `ARIMA(0,2,2)` is preferred due to its adequate fit and less complexity. Both models are considered robust, with the choice between them hinging on the trade-off between simplicity and statistical thoroughness.
 
 ```{r}
-# (3,2,2)
 model_output1 <- capture.output(sarima((ts),3,2,2))
-cat("\n**************************************************************************\n")
-# (0,2,2)
-model_output2 <- capture.output(sarima((ts),0,2,2))
-cat("\n**************************************************************************\n")
-# auto.arima (1,2,1)(2,0,0)[12] 
-model_output3 <- capture.output(sarima((ts),1,2,1,2,0,0,12))
-
-cat("\n**************************************************************************\n")
-cat("ARIMA(3,2,2):\n",model_output1,sep="\n")
-cat("\n**************************************************************************\n")
-cat("ARIMA(0,2,2):\n",model_output2,sep="\n")
-cat("\n**************************************************************************\n")
-cat("auto.arima (1,2,1)(2,0,0)[12]:\n",model_output3,sep="\n")
-cat("\n**************************************************************************\n")
+model_output1[74:105]
 ```
+
+```{r}
+model_output2 <- capture.output(sarima((ts),0,2,2))
+model_output2[21:49]
+```
+
+```{r}
+model_output3 <- capture.output(sarima((ts),1,2,1,2,0,0,12))
+model_output3[29:59]
+```
+
+<br>
+
+Equation for `ARIMA(0,2,2)`:
+
+$$(1 - B)^2 X_t = (1 + \theta_1 B + \theta_2 B^2) W_t$$ <br>
 
 ```{r}
 fit <- Arima(ts, order=c(0,2,2))
@@ -171,21 +163,13 @@ summary(fit)
 
 <br>
 
-Equation for `ARIMA(0,2,2)`v:
-
-$$(1 - B)^2 X_t = (1 + \theta_1 B + \theta_2 B^2) W_t$$ <br>
-
-<br>
-
-##### **Forecasting**
-
-------------------------------------------------------------------------
+### Forecasting
 
 The graph depicts the predicted logarithm of CPI over time, extending from historical data into future projections. The black line represents the actual historical log(CPI) values, showing a general upward trend over time, which indicates that the CPI has been increasing. The blue shaded area starting around 2020 represents the forecasted values, with the shade indicating the confidence interval of the predictions.
 
 ```{r}
 ts %>%
-  Arima(order=c(0,2,2),include.drift = TRUE) %>%
+  Arima(order=c(0,2,2)) %>%
   forecast(h=60) %>%
   autoplot() +
   ylab("Prediction") + xlab("Year") + ggtitle("log(CPI) Prediction") + theme(panel.background = element_blank())
@@ -193,9 +177,7 @@ ts %>%
 
 <br>
 
-##### **Benchmark Method**
-
-------------------------------------------------------------------------
+### Benchmark Method
 
 The ARIMA model forecasts (red line) are closest to the actual data, indicating a superior fit among the methods. Accuracy metrics support this, with ARIMA showing the lowest error rates across the board, suggesting high precision and minimal bias in forecasting. Other models like the Mean, Naive, and Seasonal Naive exhibit higher errors, indicating less accurate predictions. The Drift model performs better than these but is still outclassed by ARIMA. Overall, ARIMA is identified as the best model for forecasting CPI in this case.
 
@@ -254,11 +236,9 @@ autoplot(ts) +
   ylab("Prediction") + xlab("Year") + ggtitle("Benchmark Evaluation") + theme(panel.background = element_blank())
 ```
 
-## GDP
+## ARIMA - GDP
 
-##### **Data Processing**
-
-------------------------------------------------------------------------
+### Data Processing
 
 ```{r}
 df <- read_excel('data/data/GDP.xlsx')
@@ -273,9 +253,7 @@ autoplot(ts) + ggtitle("GDP Over Time") + xlab("Year") + ylab("GDP in billion") 
 
 <br>
 
-##### **Stationarity Check**
-
-------------------------------------------------------------------------
+### Stationarity Check
 
 Initial assessments via `ACF` and `Augmented Dickey-Fuller` tests indicated that `GDP` required differencing due to non-stationarity. After converting to a time series and applying logarithmic transformation, first differencing was insufficient in detrending, but second differencing indicated stationarity.
 
@@ -291,7 +269,7 @@ if (adf_test$p.value < 0.05) {
   cat("The time series is stationary based on the ADF test.\n")
 } else {
   cat("The time series is not stationary based on the ADF test.\n")}
-
+cat("\n********************************************************************************************\n")
 ts <- log(ts)
 ts_diff <- ts %>% diff()
 ts_diff2 <- ts %>% diff() %>% diff()
@@ -303,9 +281,7 @@ ggPacf(ts_diff2,40) + ggtitle("PACF Plot After Second Differencing") + theme(pan
 
 <br>
 
-##### **Model Fitting**
-
-------------------------------------------------------------------------
+### Model Fitting
 
 After second differencing `GDP`, ACF shows one significant lag, while PACF shows five. This suggests ARIMA parameters `p = [1,2,3,4,5]`, `d = [1,2]`, `q = [1]`. I'll test these for the lowest `AIC`, `BIC`, and `AICc`, and cross-check with `auto.arima` to forecasting.
 
@@ -337,43 +313,34 @@ for (p in 1:5)
 
 temp= as.data.frame(ls)
 names(temp)= c("p","d","q","AIC","BIC","AICc")
-
-temp
-
 aic_row <- paste("Model fitting with minimum AIC:\n", toString(temp[which.min(temp$AIC),]))
 aicc_row <- paste("\nModel fitting with minimum AICc:\n", toString(temp[which.min(temp$AICc),]))
 bic_row <- paste("\nModel fitting with minimum BIC:\n", toString(temp[which.min(temp$BIC),]))
 all_rows <- paste(aic_row, aicc_row, bic_row, sep="\n")
 cat(all_rows)
+```
 
+**auto.arima**
+
+```{r}
 auto.arima(ts)
 ```
 
 <br>
 
-##### **Model Diagnostics**
-
-------------------------------------------------------------------------
+### Model Diagnostics
 
 The first ARIMA model `(1,1,1)` shows a good fit with the lowest information criteria scores, indicating effective parameter use. The residuals suggest the model captures the data's underlying process well. The second model, which appears to be a SARIMA given the seasonal components, is more complex and doesn't offer a significantly better fit, as the information criteria scores are marginally higher and some coefficients are not statistically significant. The first model is preferable for its simplicity and performance.
 
 ```{r}
-# (1,1,1)
 model_output1 <- capture.output(sarima((ts),1,1,1))
-cat("\n**************************************************************************\n")
-# auto.arima (0,2,3)(1,0,1)[4]
-model_output2 <- capture.output(sarima((ts),0,2,3,1,0,1,4))
-
-cat("\n**************************************************************************\n")
-cat("ARIMA(1,1,1):\n",model_output1,sep="\n")
-cat("\n**************************************************************************\n")
-cat("auto.arima (0,2,3)(1,0,1)[4]:\n",model_output2,sep="\n")
-cat("\n**************************************************************************\n")
+model_output1[32:61]
 ```
 
+
 ```{r}
-fit <- Arima(ts, order=c(1,1,1))
-summary(fit)
+model_output2 <- capture.output(sarima((ts),0,2,3,1,0,1,4))
+model_output2[38:69]
 ```
 
 <br>
@@ -382,11 +349,14 @@ Equation for `ARIMA(1,1,1)`:
 
 $$(1 - \phi B)(1 - B)X_t = (1 + \theta B)W_t$$
 
+```{r}
+fit <- Arima(ts, order=c(1,1,1))
+summary(fit)
+```
+
 <br>
 
-##### **Forecasting**
-
-------------------------------------------------------------------------
+### Forecasting
 
 The forecast shows a projected increase in the log-transformed GDP, with historical data indicating a good model fit. The widening confidence intervals suggest greater uncertainty in the longer term. While useful for economic planning, these predictions rely on past trends continuing unchanged and may not account for unforeseen economic events.
 
@@ -400,9 +370,7 @@ ts %>%
 
 <br>
 
-##### **Benchmark Method**
-
-------------------------------------------------------------------------
+### Benchmark Method
 
 The ARIMA model seems to closely follow the actual trend, along with the Drift model. The other models---Mean, Naive, and Seasonal Naive---diverge from the actual trend as time progresses, indicating less accuracy.
 
@@ -462,18 +430,12 @@ autoplot(ts) +
   guides(colour=guide_legend(title="Forecast")) +
   ylab("Prediction") + xlab("Year") + ggtitle("Benchmark Evaluation") + theme(panel.background = element_blank())
 ```
-:::
 
-## SARIMA - Treasury Security
+## SARIMA - 3 Month Treasury Bill
 
 `SARIMA` models are used for treasury yields like 3-month T-bills or 20-year T-bonds because they help predict the regular ups and downs that happen throughout the year. These ups and downs can be due to when the government borrows more, changes in how often people invest, and rules that banks follow at certain times. SARIMA can catch these patterns, making it easier to guess where yields will go next, which is very important for people who invest in these securities.
 
-::: panel-tabset
-## 3 Month Treasury Bill
-
-##### **Data Processing**
-
-------------------------------------------------------------------------
+### Data Processing
 
 ```{r}
 df <- read_excel('data/data/3-mon-t-bill-rate.xlsx')
@@ -498,9 +460,7 @@ autoplot(ts) +
 
 <br>
 
-##### **Stationarity Check**
-
-------------------------------------------------------------------------
+### Stationarity Check
 
 Initial assessments via `ACF` and `Augmented Dickey-Fuller` tests indicated that `3Mon T-Bill Yield` required differencing due to non-stationarity. After converting to a time series, first differencing and seasonal differencing alone were insufficient in detrending, but the combination of non-seasonal and seaonal differencing indicated strong stationarity.
 
@@ -518,6 +478,7 @@ if (adf_test$p.value < 0.05) {
   cat("The time series is stationary based on the ADF test.\n")
 } else {
   cat("The time series is not stationary based on the ADF test.\n")}
+cat("\n********************************************************************************************\n")
 
 ts_diff <- ts %>% diff()
 ggAcf(ts_diff,40) + ggtitle("ACF Plot After Differencing") + theme(panel.background = element_blank())
@@ -534,9 +495,7 @@ ggPacf(ts_diff2,40) + ggtitle("PACF Plot After Second Differencing") + theme(pan
 
 <br>
 
-##### **Model Fitting**
-
-------------------------------------------------------------------------
+### Model Fitting
 
 After second differencing `3 Month T-Bill Yield`, ACF shows three lags, while PACF shows four. This suggests ARIMA parameters `p = [0,1,2,3]`, `P = [2]`, `d = [1]`, `[D = 1]`, `q = [0,1,2], Q = [1]`. I'll test these for the lowest `AIC`, `BIC`, and `AICc`, and cross-check with `auto.arima` to forecasting.
 
@@ -582,17 +541,19 @@ min_aicc_info <- paste("Minimum AICc:", toString(output[which.min(output$AICc), 
 cat(min_aic_info, "\n")
 cat(min_bic_info, "\n")
 cat(min_aicc_info, "\n")
+```
 
+**auto.arima**
+
+```{r}
 auto.arima(ts)
 ```
 
 <br>
 
-##### **Model Diagnostics**
+### Model Diagnostics
 
-------------------------------------------------------------------------
-
-<!-- xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx -->
+In the model fitting analysis, two prominent models emerged: `SARIMA(3,1,0)(2,0,0)[4]` and `SARIMA(1,1,1)(2,1,1)[4]`. The diagnostic comparison for these models focuses on evaluating key summary statistics, including the presence of a white noise pattern in the residuals, p-values, and critical model selection criteria like AIC, AICc, and BIC.
 
 ```{r}
 model_output1 <- capture.output(sarima((ts),1, 1, 1, 2, 1, 1, 4))
@@ -604,6 +565,12 @@ model_output2 <- capture.output(sarima((ts),3, 1, 0, 2, 0, 0, 4))
 model_output2[25:56]
 ```
 
+<br>
+
+Equation for `SARIMA(1,1,1)(2,1,1)[4]`:
+
+$$(1 - \phi B)(1 - B)(1 - \Phi_1 B^s)(1 - \Phi_2 B^{2s})(1 - B^s)X_t = (1 + \theta B)(1 + \Theta_1 B^s)W_t$$
+
 ```{r}
 fit <- Arima(ts,order=c(1,1,1), seasonal=c(2,1,1))
 summary(fit)
@@ -611,17 +578,9 @@ summary(fit)
 
 <br>
 
-Equation for `SARIMA(1,1,1)(2,1,1)[4]`:
+### Forecasting
 
-$$(1 - \phi B)(1 - B)(1 - \Phi_1 B^s)(1 - \Phi_2 B^{2s})(1 - B^s)X_t = (1 + \theta B)(1 + \Theta_1 B^s)W_t$$
-
-<br>
-
-##### **Forecasting**
-
-------------------------------------------------------------------------
-
-<!-- xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx -->
+The forecasting plot displays the historical and forecasted values for the 3 Month Treasury Yield over time, segmented into quarterly intervals. The historical data is traced with a solid black line that spans from 1980 up until around 2020. The forecasted data begins near 2020, transitioning into a dotted line. Accompanying the forecasted values is a blue shaded area that represents the confidence intervals, suggesting a range of possible values within which the true yield might fall. This area increases in size as the forecast extends further into the future, reflecting growing uncertainty in the model's predictions over time.
 
 ```{r}
 fit %>%
@@ -632,11 +591,9 @@ fit %>%
 
 <br>
 
-##### **Benchmark Method**
+### Benchmark Method
 
-------------------------------------------------------------------------
-
-<!-- xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx -->
+The benchmark plot compares several forecasting models, showing the SARIMA model outperforms others with the lowest error metrics, suggesting it's the most accurate for predicting the given time series from 1980 to the near present.
 
 ```{r}
 cat("SARIMA Model Accuracy Metrics:\n")
@@ -695,9 +652,9 @@ autoplot(ts) +
 
 <br>
 
-**Cross Validation**
+### Cross Validation
 
-<!-- xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx -->
+The graph shows a multi-step forecast horizon where two models are compared based on their Mean Absolute Error. Across all forecast horizons, `Model 2` consistently reports a lower MAE, suggesting it has a more accurate forecast performance than `Model 1`. This is reinforced by one-step ahead cross-validation results where `Model 2` also has a lower MAE and MSE, confirming its superior predictive accuracy.
 
 ```{r}
 split_index <- floor(length(ts) * 0.4)
@@ -726,7 +683,7 @@ MAE2 <- mean(errors$err2, na.rm = TRUE)
 MSE1 <- mean(errors$err3, na.rm = TRUE)
 MSE2 <- mean(errors$err4, na.rm = TRUE)
 
-cat("One-Step Ahead Cross Validation\n")
+cat("One-Step Ahead Cross Validation:\n")
 cat("Model 1 - MAE:", MAE1, "MSE:", MSE1, "\n")
 cat("Model 2 - MAE:", MAE2, "MSE:", MSE2, "\n")
 
@@ -742,6 +699,7 @@ if (MAE1 < MAE2 && MSE1 < MSE2) {
 ```
 
 ```{r}
+cat("Multi Step Cross Validation:\n")
 n <- length(ts)
 forecast_horizon <- 4
 split_index <- floor(n * 0.4)
@@ -777,11 +735,9 @@ lines(1:forecast_horizon, colMeans(mae2, na.rm=TRUE), type="l", col=3)
 legend("topleft", legend=c("M1", "M2"), col=2:3, lty=1)
 ```
 
-## 6 Month Treasury Bill
+## SARIMA - 6 Month Treasury Bill
 
-##### **Data Processing**
-
-------------------------------------------------------------------------
+### Data Processing
 
 ```{r}
 df <- read_excel('data/data/6-mon-t-bill-rate.xlsx')
@@ -806,11 +762,9 @@ autoplot(ts) +
 
 <br>
 
-##### **Stationarity Check**
+### Stationarity Check
 
-------------------------------------------------------------------------
-
-<!-- xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx -->
+The provided plots illustrate the stages of time series analysis, where the initial ACF plot suggests non-stationarity, confirmed by a significant Augmented Dickey-Fuller test result, indicating that differencing has led to a stationary series. The decomposition shows the time series' trend and seasonality, while subsequent ACF and PACF plots demonstrate effective stabilization of the series after differencing, readying it for ARIMA modeling.
 
 ```{r}
 ggAcf(ts,40) + ggtitle("ACF Plot") + 
@@ -826,7 +780,7 @@ if (adf_test$p.value < 0.05) {
   cat("The time series is stationary based on the ADF test.\n")
 } else {
   cat("The time series is not stationary based on the ADF test.\n")}
-
+cat("\n********************************************************************************************\n")
 ts_diff <- ts %>% diff()
 ggAcf(ts_diff,40) + ggtitle("ACF Plot After Differencing") + theme(panel.background = element_blank())
 ggPacf(ts_diff,40) + ggtitle("PACF Plot After Differencing") + theme(panel.background = element_blank())
@@ -842,11 +796,9 @@ ggPacf(ts_diff2,40) + ggtitle("PACF Plot After Second Differencing") + theme(pan
 
 <br>
 
-##### **Model Fitting**
+### Model Fitting
 
-------------------------------------------------------------------------
-
-<!-- xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx -->
+After differencing `6 Month T-Bill Yield`, ACF and PACF show significance at multiple lags. This suggests ARIMA parameters `p = [0,1,2,3]`, `P = [2]`, `d = [1]`, `[D = 1]`, `q = [0,1,2,3], Q = [1]`. I'll test these for the lowest `AIC`, `BIC`, and `AICc`, and cross-check with `auto.arima` to forecasting.
 
 ```{r}
 SARIMA.c=function(p1,p2,q1,q2,P1,P2,Q1,Q2,data){
@@ -890,36 +842,33 @@ min_aicc_info <- paste("Minimum AICc:", toString(output[which.min(output$AICc), 
 cat(min_aic_info, "\n")
 cat(min_bic_info, "\n")
 cat(min_aicc_info, "\n")
+```
 
+**auto.arima**
+
+```{r}
 auto.arima(ts)
 ```
 
 <br>
 
-##### **Model Diagnostics**
+### Model Diagnostics
 
-------------------------------------------------------------------------
-
-<!-- xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx -->
+In the model fitting analysis, three prominent models emerged: `SARIMA(0,1,0)(2,0,0)[4]`, `SARIMA(2,1,2)(2,1,1)[4]` and `SARIMA(1,1,1)(2,1,1)[4]`. The diagnostic comparison for these models focuses on evaluating key summary statistics, including the presence of a white noise pattern in the residuals, p-values, and critical model selection criteria like AIC, AICc, and BIC.
 
 ```{r}
-model_output1 <- capture.output(sarima((ts),0, 1, 0, 2, 0, 0, 4))
-model_output1
+model_output1 <- capture.output(sarima((ts), 0, 1, 0, 2, 0, 0, 4))
+model_output1[22:51]
 ```
 
 ```{r}
 model_output2 <- capture.output(sarima((ts),2, 1, 2, 2, 1, 1, 4))
-model_output2
+model_output2[121:154]
 ```
 
 ```{r}
 model_output3 <- capture.output(sarima((ts),1, 1, 1, 2, 1, 1, 4))
-model_output3
-```
-
-```{r}
-fit <- Arima(ts,order=c(2,1,2), seasonal=c(2,1,1))
-summary(fit)
+model_output3[70:101]
 ```
 
 <br>
@@ -927,14 +876,16 @@ summary(fit)
 Equation for `SARIMA(2,1,2)(2,1,1)[4]`:
 
 $$(1 - \phi_1 B - \phi_2 B^2)(1 - B)(1 - \Phi_1 B^s - \Phi_2 B^{2s})(1 - B^s)X_t = (1 + \theta_1 B + \theta_2 B^2)(1 + \Theta_1 B^s)W_t$$
+```{r}
+fit <- Arima(ts,order=c(2,1,2), seasonal=c(2,1,1))
+summary(fit)
+```
 
 <br>
 
-##### **Forecasting**
+### Forecasting
 
-------------------------------------------------------------------------
-
-<!-- xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx -->
+The forecasting plot illustrates the historical and predicted quarterly data for the 6 Month Treasury Yield, spanning from 1980 and extending beyond 2020. The historical data, depicted by a solid black line, shows the yield's volatility over time. The forecast, beginning near 2020, is shown with a dotted line and a blue shaded area indicating the prediction intervals, suggesting increased uncertainty in the forecast as time progresses.
 
 ```{r}
 fit %>%
@@ -945,11 +896,9 @@ fit %>%
 
 <br>
 
-##### **Benchmark Method**
+### Benchmark Method
 
-------------------------------------------------------------------------
-
-<!-- xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx -->
+The plot compares the performance of several forecasting models for an economic time series, with the `SARIMA` model showing the lowest RMSE and MAE, indicating it has a strong predictive accuracy. The Drift model also performs well in certain metrics like MPE and MAPE. In contrast, the Seasonal Naive model appears to be the least accurate, with the highest error values.
 
 ```{r}
 cat("SARIMA Model Accuracy Metrics:\n")
@@ -1006,9 +955,9 @@ autoplot(ts) +
 
 <br>
 
-**Cross Validation**
+### Cross Validation
 
-<!-- xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx------------------------------------------------------------------------xxxxxxxxxxxxxxxxxx -->
+The graph displays the MAE and MSE for two models across different forecast horizons. Model 1, represented by the red line, consistently shows a lower MAE than Model 2, the green line, indicating more accurate forecasts at all points. This is supported by one-step ahead cross-validation results where Model 1 has lower MAE and MSE values than Model 2, suggesting that Model 1 has a better predictive performance.
 
 ```{r}
 split_index <- floor(length(ts) * 0.4)
@@ -1038,7 +987,7 @@ MAE2 <- mean(errors$err2, na.rm = TRUE)
 MSE1 <- mean(errors$err3, na.rm = TRUE)
 MSE2 <- mean(errors$err4, na.rm = TRUE)
 
-cat("One-Step Ahead Cross Validation\n")
+cat("One-Step Ahead Cross Validation:\n")
 cat("Model 1 - MAE:", MAE1, "MSE:", MSE1, "\n")
 cat("Model 2 - MAE:", MAE2, "MSE:", MSE2, "\n")
 
@@ -1054,9 +1003,10 @@ if (MAE1 < MAE2 && MSE1 < MSE2) {
 ```
 
 ```{r}
+cat("Multi Step Cross Validation:\n")
 n <- length(ts)
 forecast_horizon <- 4
-split_index <- floor(n * 0.4)
+split_index <- floor(n * 0.6)
 train_size <- split_index
 test_size <- n - split_index
 
@@ -1088,4 +1038,3 @@ plot(1:forecast_horizon, colMeans(mae1, na.rm=TRUE), type="l", col=2, xlab="Hori
 lines(1:forecast_horizon, colMeans(mae2, na.rm=TRUE), type="l", col=3)
 legend("topleft", legend=c("M1", "M2"), col=2:3, lty=1)
 ```
-:::

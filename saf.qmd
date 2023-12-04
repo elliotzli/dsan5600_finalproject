@@ -1,5 +1,0 @@
----
-title: "Spectral Analysis and Filtering"
-format: html
----
-

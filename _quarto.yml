@@ -26,7 +26,6 @@ website:
         contents:
           - arma.qmd
           - arimax.qmd
-          - saf.qmd
           - fin-ts-model.qmd
           - deeplearning.qmd
       - text: "---"

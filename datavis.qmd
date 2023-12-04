@@ -160,57 +160,22 @@ import plotly.graph_objects as go
 import plotly.io as pio
 import pandas as pd
 import warnings
-pio.renderers.default = "notebook_connected"
+
+warnings.filterwarnings("ignore")
+pio.renderers.default = "plotly_mimetype+notebook_connected"
 df = pd.read_excel('data/data/t-bill-vs-econ-index.xlsx')
 df.ffill(inplace=True)
-for col in df.columns[1:]:
+for col in ['DGS10', 'DGS20', 'DGS30', 'MORTGAGE30']:
     df[col] = (df[col] - df[col].mean()) / df[col].std()
+
 fig1 = go.Figure()
-for i, col in enumerate(df.columns[1:]):
-    visible_bool = i < 4  
-    fig1.add_trace(go.Scatter(x=df['observation_date'], y=df[col], name=col, visible=visible_bool,line=dict(width=1)))
-buttons = [
-    dict(label='Treasury Only',
-         method='update',
-         args=[{'visible': [True, True, True, True, False, False, False, False, False]}]),
-    dict(label='Compare to CPI',
-         method='update',
-         args=[{'visible': [True, True, True, True, True, False, False, False, False]}]),
-    dict(label='Compare to FEDFUNDS',
-         method='update',
-         args=[{'visible': [True, True, True, True, False, True, False, False, False]}]),
-    dict(label='Compare to USDIDX',
-         method='update',
-         args=[{'visible': [True, True, True, True, False, False, True, False, False]}]),
-    dict(label='Compare to GDP',
-         method='update',
-         args=[{'visible': [True, True, True, True, False, False, False, True, False]}]),
-    dict(label='Compare to UER',
-         method='update',
-         args=[{'visible': [True, True, True, True, False, False, False, False, True]}]),
-    dict(label='Show All',
-         method='update',
-         args=[{'visible': [True for _ in df.columns[1:]]}]),
-    dict(label='None',
-         method='update',
-         args=[{'visible': [False for _ in df.columns[1:]]}])
-]
+
+for col in ['DGS10', 'DGS20', 'DGS30', 'MORTGAGE30']:
+    fig1.add_trace(go.Scatter(x=df['observation_date'], y=df[col], name=col, line=dict(width=1)))
 
 fig1.update_layout(
-    updatemenus=[
-        dict(
-            buttons=buttons,
-            direction="down",
-            active=0,  
-            x=1.2,
-            y=0.68,
-        ),
-    ],
-    xaxis=dict(
-        rangeslider=dict(visible=True),
-        type="date"
-    ),
-    title_text="Treasury Bond Yields and Economic Measures Across Time <br><sup>compare the movement of long term Treasury Bill Yields and their influence on major economic indicators</sup>",
+    xaxis=dict(rangeslider=dict(visible=True), type="date"),
+    title_text="US Treasury Bond Yields Over Time<br><sup>compare the movement of long term Treasury Bill Yields</sup>",
     xaxis_title="Date",
     yaxis_title="Standardized Rates",
     width=900,
@@ -221,16 +186,49 @@ fig1.update_layout(
 
 fig1.update_xaxes(gridcolor='lightgrey', griddash='dot')
 fig1.update_yaxes(gridcolor='lightgrey', griddash='dot')
+
 note = 'Source:<a href="https://fred.stlouisfed.org/"">Federal Reserve Economic Data</a>'
 fig1.add_annotation(
     showarrow=False,
     text=note,
-    font=dict(size=10),
-    xref='paper',
-    x=1.17,
-    yref='paper',
-    y=-0.45
-)
+    font=dict(size=10), 
+    xref='x domain',
+    x=1.2,
+    yref='y domain',
+    y=-0.5
+    )
 
 fig1.show()
+
+for col in ['MORTGAGE30', 'CPI', 'FEDFUNDS', 'USDIDX', 'GDP', 'UER']:
+    df[col] = (df[col] - df[col].mean()) / df[col].std()
+
+fig2 = go.Figure()
+for col in ['MORTGAGE30', 'CPI', 'FEDFUNDS', 'USDIDX', 'GDP', 'UER']:
+    fig2.add_trace(go.Scatter(x=df['observation_date'], y=df[col], name=col, line=dict(width=1)))
+
+fig2.update_layout(
+    xaxis=dict(rangeslider=dict(visible=True), type="date"),
+    title_text="Economic Measures Over Time<br><sup>compare the movement of 30 year mortgage rate and its influence on major economic indicators</sup>",
+    xaxis_title="Date",
+    yaxis_title="Standardized Rates",
+    width=900,
+    height=600,
+    margin=dict(t=100),
+    plot_bgcolor='white',
+)
+
+fig2.update_xaxes(gridcolor='lightgrey', griddash='dot')
+fig2.update_yaxes(gridcolor='lightgrey', griddash='dot')
+note = 'Source:<a href="https://fred.stlouisfed.org/"">Federal Reserve Economic Data</a>'
+fig2.add_annotation(
+    showarrow=False,
+    text=note,
+    font=dict(size=10), 
+    xref='x domain',
+    x=1.2,
+    yref='y domain',
+    y=-0.5
+    )
+fig2.show()  
 ```

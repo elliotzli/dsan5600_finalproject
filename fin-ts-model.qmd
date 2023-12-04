@@ -1,5 +1,225 @@
 ---
 title: "Financial Time Series Models (ARCH/GARCH)"
-format: html
+subtitle: "Exploration of the Volatility Dynamics of the USD Index"
+format:   
+  html:
+    smooth-scroll: true
+    toc: true
+    code-fold: true
+    code-tools: true
+    embed-resources: true
+    mermaid:
+      theme: neutral
+bibliography: citation.bib
+execute: 
+  echo: false
+  warning: false
 ---
 
+```{r}
+library(reshape2)
+library(dplyr)
+library(parallel)
+library(zoo)
+library(TTR)
+library(readr)
+library(readxl)
+library(tidyverse)
+library(ggplot2)
+library(forecast)
+library(astsa)
+library(xts)
+library(tseries)
+library(fpp2)
+library(fma)
+library(lubridate)
+library(TSstudio)
+library(quantmod)
+library(tidyquant)
+library(plotly)
+library(knitr)
+library(vars)
+library(TSA)
+library(fGarch) 
+library(dynlm)
+library(FinTS)
+library(rugarch)
+```
+
+## Literature Review
+
+Using an ARCH/GARCH model on the USD index is crucial for several key reasons. Firstly, it excels in forecasting financial time series volatility, which is vital for investors and policymakers in anticipating market fluctuations. This is especially important for risk management in international trade and investment, as understanding the volatility of the USD index allows businesses and investors to make more informed decisions and mitigate potential risks. Additionally, since the USD index is a significant economic indicator, reflecting the value of the U.S. dollar relative to a basket of foreign currencies, employing an ARCH model can offer deeper insights into the dynamics of currency markets. These insights are invaluable for economic policy and strategy formulation. Furthermore, for companies engaged in international business, accurately modeling USD index volatility can assist in strategic planning, particularly in currency hedging and pricing strategies. Finally, by providing a more accurate understanding of future price movements and volatility, ARCH models contribute to enhancing the efficiency of financial markets, benefiting a wide range of market participants. Overall, the application of an ARCH model to the USD index is essential for better market understanding, effective risk management, and strategic economic decision-making.
+
+## Data Processing
+
+The first plot shows the USD Index value over time, illustrating how the strength of the US dollar has changed against a basket of foreign currencies. It highlights a significant dip around 2008, which aligns with the financial crisis, followed by a general upward trend with some intermittent volatility, reflecting various economic conditions and policy changes.
+
+The second plot represents the returns of the USD Index over the same time frame. Unlike the first plot, which shows the value, this one focuses on the rate of change, indicating the volatility of the returns. The returns fluctuate around zero, with several spikes both upwards and downwards, which suggests periods of increased volatility.
+
+```{r}
+df_usd <- read_excel('data/data/usd.xlsx')
+df_usd <- na.omit(df_usd)
+df_usd$Date <- as.Date(df_usd[[1]])
+df_usd$USD <- as.numeric(df_usd[[2]])
+ts_usd <- ts(df_usd$USD, start = c(year(min(df_usd$Date)), as.numeric(format(min(df_usd$Date), "%j"))), frequency = 262)
+
+autoplot(ts_usd) + 
+    ggtitle("USD Index Over Time") +
+    xlab("Year") + 
+    ylab("USD Index") + 
+    theme(panel.background = element_blank())
+
+usd_return <- diff(ts_usd)
+autoplot(usd_return) +
+  labs(x = "Year",
+       y = "USD Index Return",
+       title = "USD Index Return Over Time") +
+  theme(panel.background = element_blank())
+```
+
+<br>
+
+## ARMA Model Fitting
+
+In the ACF plot for the squared returns, significant autocorrelation at various lags that exceed the confidence bands is observed. This indicates that there is volatility clustering in the data, where large changes in returns tend to be followed by large changes, and small changes tend to be followed by small changes.
+
+The PACF plot for the squared returns also shows some significant spikes at early lags, which may indicate that there is a relationship between the current squared return and its previous values that is not explained by its more recent past.
+
+```{r}
+ggAcf(usd_return,40) + theme(panel.background = element_blank())
+ggPacf(usd_return,40) + theme(panel.background = element_blank())
+ggAcf(usd_return^2,40) + theme(panel.background = element_blank())
+ggPacf(usd_return^2,40) + theme(panel.background = element_blank())
+```
+
+<br>
+
+### Hyperparameter Tuning
+
+Both AIC and AICc indicate that an `ARMA(1,0)` model is preferred, implying the data is best described by one autoregressive term. In contrast, BIC points to a simpler `ARMA(0,0)` model, implying that the returns might be random and not significantly influenced by past values.
+
+```{r}
+i=1
+temp= data.frame()
+ls=matrix(rep(NA,6*10),nrow=10)
+
+for (p in 0:1)
+{
+  for(q in 0:1)
+  {
+    for(d in 0:1)
+    {
+      
+      if(p+d+q<=8)
+      {
+        model<- Arima(usd_return,order=c(p,d,q))
+        ls[i,]= c(p,d,q,model$aic,model$bic,model$aicc)
+        i=i+1
+
+      }
+      
+    }
+  }
+}
+
+temp= as.data.frame(ls)
+names(temp)= c("p","d","q","AIC","BIC","AICc")
+aic_row <- paste("Model fitting with minimum AIC:\n", toString(temp[which.min(temp$AIC),]))
+aicc_row <- paste("\nModel fitting with minimum AICc:\n", toString(temp[which.min(temp$AICc),]))
+bic_row <- paste("\nModel fitting with minimum BIC:\n", toString(temp[which.min(temp$BIC),]))
+all_rows <- paste(aic_row, aicc_row, bic_row, sep="\n")
+cat(all_rows)
+```
+
+<br>
+
+### Model Diagnostics
+
+The `ARMA(1,0)` model's diagnostics indicate a good fit for the **`usd_return`** data, with no significant autocorrelation in the residuals and a generally normal distribution of standardized residuals. The convergence of the model and low AIC, AICc, and BIC values also support its adequacy.
+
+```{r}
+model_output1 <- capture.output(sarima(usd_return,1,0,0))
+model_output1[13:41]
+```
+
+## GARCH Model Fitting
+
+The ACF and PACF plots of the squared residuals from the ARMA(1,0) model indicate the presence of volatility clustering. The significant spikes across various lags in the ACF plot suggest an ARCH effect. This pattern implies that ARCH or GARCH is more appropriate for capturing the observed volatility dynamics in the USD index returns.
+
+```{r}
+fit<-Arima(usd_return,order=c(1,0,0),include.drift = TRUE)
+res<-fit$residuals
+ggAcf(res^2,40) + theme(panel.background = element_blank())
+ggPacf(res^2,40) + theme(panel.background = element_blank())
+```
+
+<br>
+
+### Hyperparameter Tuning
+
+The `GARCH(1,1)` model parameters suggest that volatility shocks have a significant impact on current volatility, with a high persistence of these shocks over time. This indicates a stable model with long-lasting effects of volatility in the data.
+
+```{r}
+model <- list()
+cc <- 1
+for (p in 1:1) {
+  for (q in 1:1) {
+    model[[cc]] <- garch(res,order=c(q,p),trace=F)
+    cc <- cc + 1
+  }
+} 
+
+GARCH_AIC <- sapply(model, AIC)
+model[[which(GARCH_AIC == min(GARCH_AIC))]]
+```
+
+<br>
+
+### Model Summary
+
+The `GARCH(1,1)` model indicates significant volatility patterns in the USD index returns. High significance of model coefficients suggests that past volatility has a strong influence on future volatility. The Jarque-Bera test shows that the return distribution is not normal, hinting at the potential for extreme movements. The Box-Ljung test confirms that the model captures these patterns well.
+
+```{r}
+fit <- garch(x = res, order = c(1, 1), trace = FALSE)
+summary <- summary(fit)
+summary
+```
+
+<br>
+
+### Final Model
+
+$$ x_t = \mu + z_t $$ $$z_t=\sigma_t \epsilon_t$$
+
+$$\sigma_t = 0.0005776 + 0.0535034 (z_{t-1}) + 0.9440053 (\sigma_{t-1})$$
+
+## Forecasting
+
+The plot suggests that the model expects the variable to remain relatively stable in the near future. The fact that the bands are quite narrow suggests the model is confident about its forecasts.
+
+```{r}
+fit = garchFit(~ garch(1, 1), data = res, trace = FALSE)
+predict <- predict(fit, n.ahead = 200, plot=TRUE)
+```
+
+The volatility plot from the GARCH model on USD returns highlights periods of heightened volatility with shaded areas, aligning with significant economic events. Notably, the plot shows increased volatility during the **2008-2009 global financial crisis**, the **2010 European debt crisis**, the **2020 COVID-19 pandemic,** and the **2022-2023 Federal Reserve** **Inflationary Countermeasure**. The accompanying R code snippet details the creation of this plot, plotting estimated volatility against time and marking key periods with shaded rectangles. This visual analysis suggests that the U.S. Dollar Index experienced its most significant volatility during these marked economic events, as shown by the frequency and magnitude of the peaks in the plot.
+
+```{r}
+ht <- fit@h.t
+date <- df_usd$Date[-1]
+data= data.frame(ht,date)
+data$date <- as.Date(data$date, format="%Y-%m-%d")
+
+plot <- ggplot(data, aes(y = ht, x = date)) + 
+  geom_line() +
+  ylab('Estimated Volatility') +
+  xlab('Year') +
+  ggtitle("U.S. Dollar Volatility Over Time") +
+  theme(panel.background = element_blank()) +
+  annotate("rect", xmin = as.Date("2007-09-01"), xmax = as.Date("2009-03-01"), ymin = 0, ymax = 1, alpha = 0.2) +
+  annotate("rect", xmin = as.Date("2010-05-01"), xmax = as.Date("2010-08-01"), ymin = 0, ymax = 1, alpha = 0.2) +
+  annotate("rect", xmin = as.Date("2020-02-01"), xmax = as.Date("2020-04-15"), ymin = 0, ymax = 1, alpha = 0.2) +
+  annotate("rect", xmin = as.Date("2022-03-01"), xmax = as.Date("2023-08-01"), ymin = 0, ymax = 1, alpha = 0.2)
+
+print(plot)
+```

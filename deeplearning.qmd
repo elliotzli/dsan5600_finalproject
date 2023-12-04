@@ -1,5 +1,450 @@
 ---
 title: "Deep Learning for Time Series"
-format: html
+subtitle: "Comparative Analysis of Deep Learning (GRU, LSTM, RNN) and Traditional Time Series Models"
+format: 
+  html:
+    smooth-scroll: true
+    toc: true
+    code-fold: true
+    code-tools: true
+    embed-resources: false
+    mermaid:
+      theme: neutral
+bibliography: citation.bib
+execute: 
+  echo: false
+  warning: false
 ---
 
+In my study, I apply deep learning models to analyze consumer sentiment from 1978 to 2023. This period covers a range of significant economic changes and technological advancements, which greatly affect consumer behavior. By using advanced deep learning techniques, such as LSTM, RNN, and GRU, which are known for their effectiveness in handling time-series data, we aim to uncover how consumer sentiment has changed over these decades. Our goal is to provide valuable insights for economists, policymakers, and businesses. This analysis is not just academically relevant; it's crucial for understanding consumer trends and making informed decisions in various sectors.
+
+```{python}
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+import plotly.express as px
+import plotly.io as pio
+import plotly.graph_objects as go
+from plotly.subplots import make_subplots
+import pandas as pd 
+from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error
+from tensorflow import keras
+from tensorflow.keras import layers, initializers, regularizers
+from keras.layers import Dense, SimpleRNN, LSTM, GRU
+from keras.models import Sequential
+from keras.optimizers import RMSprop
+from keras.callbacks import EarlyStopping
+```
+
+## Data Processing
+```{python}
+df = pd.read_excel('data/data/consumer-sentiment.xlsx')
+df['observation_date'] = pd.to_datetime(df['observation_date'])
+df.rename(columns={'UMCSENT': 'consumer_sentiment'}, inplace=True)
+df = df[(df['observation_date'] >= '1978-01-01') & (df['observation_date'] <= '2023-07-01')]
+df = df.dropna()
+df.reset_index(drop=True, inplace=True)
+```
+
+
+```{python}
+fig = go.Figure()
+fig.add_trace(go.Scatter(x=df['observation_date'], 
+                         y=df['consumer_sentiment'], 
+                         mode='lines',
+                         name='Consumer Sentiment',
+                         line=dict(color='lightseagreen')))
+
+fig.update_layout(
+    title_text="Consumer Sentiment Over Time<br><sup>indicative Trends of U.S. Consumer Confidence as a Barometer of Economic Perception</sup>",
+    xaxis_title="Date",
+    yaxis_title="Consumer Sentiment",
+    width=900,
+    height=600,  
+    margin=dict(t=100),
+    plot_bgcolor='white',
+    yaxis_range=[df['consumer_sentiment'].min() - 5, df['consumer_sentiment'].max() + 5]
+)
+
+fig.update_xaxes(gridcolor='lightgrey', griddash='dot')
+fig.update_yaxes(gridcolor='lightgrey', griddash='dot')
+
+note = 'Source: <a href="https://fred.stlouisfed.org/">Federal Reserve Economic Data</a>'
+fig.add_annotation(
+    showarrow=False,
+    text=note,
+    font=dict(size=10), 
+    xref='paper',
+    x=1,
+    yref='paper',
+    y=-0.1
+)
+
+fig.show()
+```
+
+
+```{python}
+def get_train_test(data):
+    data = np.array(data)
+    mean = np.mean(data, axis=0)
+    std = np.std(data, axis=0)
+    
+    normalized_data = (data - mean) / std
+    
+    n = len(normalized_data)
+    split = int(n * 0.85)
+    train_data = normalized_data[:split]
+    test_data = normalized_data[split:]
+    
+    return normalized_data, train_data, test_data
+
+normalized_data, train_data, test_data  = get_train_test(df["consumer_sentiment"])
+print(f'Train shape: {train_data.shape}')
+print(f'Test shape: {test_data.shape}')
+
+def get_XY(dat, time_steps, plot_data_partition=False):
+    Y_ind = np.arange(time_steps, len(dat), time_steps)
+    Y = dat[Y_ind]
+
+    rows_x = len(Y)
+    X_ind = [*range(time_steps * rows_x)]
+    del X_ind[::time_steps] 
+    X = dat[X_ind]
+    X1 = np.reshape(X, (rows_x, time_steps - 1, 1))
+
+    return X1, Y, X_ind, Y_ind
+
+time_steps = 5
+testX, testY, testX_ind, testY_ind = get_XY(test_data, time_steps)
+trainX, trainY, trainX_ind, trainY_ind = get_XY(train_data, time_steps)
+```
+
+
+```{python}
+train_dates = df['observation_date'][:len(train_data)]
+test_dates = df['observation_date'][len(train_data):]
+
+fig = go.Figure()
+
+fig.add_trace(go.Scatter(x=train_dates, y=train_data, mode='lines', name='Train Data', line=dict(color='lightseagreen')))
+
+fig.add_trace(go.Scatter(x=test_dates, y=test_data, mode='lines', name='Test Data', line=dict(color='darkorange')))
+
+fig.update_layout(
+    title_text="Normalized Consumer Sentiment Over Time<br><sup>indicative Trends of U.S. Consumer Confidence as a Barometer of Economic Perception</sup>",
+    xaxis_title="Date",
+    yaxis_title="Consumer Sentiment",
+    width=900,
+    height=600,  
+    margin=dict(t=100),
+    plot_bgcolor='white')
+
+fig.update_xaxes(gridcolor='lightgrey', griddash='dot')
+fig.update_yaxes(gridcolor='lightgrey', griddash='dot')
+
+note = 'Source: <a href="https://fred.stlouisfed.org/">Federal Reserve Economic Data</a>'
+fig.add_annotation(
+    showarrow=False,
+    text=note,
+    font=dict(size=10), 
+    xref='paper',
+    x=1.1,
+    yref='paper',
+    y=-0.1
+)
+
+fig.show()
+```
+
+## RNN
+
+The first image shows the model's training and validation loss decreasing over epochs, with occasional spikes in validation loss suggesting possible overfitting. The second image reveals that the model's predictions closely align with actual consumer sentiment data, indicating effective learning. The RNN model is simple yet performs well, with a low number of parameters and good accuracy, as reflected in the train and test RMSE values.
+
+```{python}
+layer = 50
+epochs = 50
+f_batch = 0.2  
+optimizer = "RMSprop"
+validation_split = 0.2
+
+model = Sequential()
+model.add(
+    SimpleRNN(
+        layer,
+        return_sequences=False,
+        input_shape=(trainX.shape[1], trainX.shape[2]),
+        recurrent_regularizer=regularizers.L2(1e-2),
+        activation="tanh",
+    )
+)
+
+model.add(Dense(units=1, activation="linear"))
+model.compile(loss="MeanSquaredError", optimizer=optimizer)
+model.summary()
+
+history = model.fit(
+    trainX,
+    trainY,
+    epochs=epochs,
+    batch_size=int(f_batch * trainX.shape[0]),
+    validation_split=validation_split,
+    verbose=0,
+)
+
+train_predict = model.predict(trainX).squeeze()
+test_predict = model.predict(testX).squeeze()
+train_rmse = np.sqrt(mean_squared_error(trainY, train_predict))
+test_rmse = np.sqrt(mean_squared_error(testY, test_predict))
+print("Train RMSE = %.5f" % (train_rmse))
+print("Test RMSE = %.5f" % (test_rmse))
+
+def plot_loss(history):
+    trace_loss = go.Scatter(y=history.history['loss'], mode='lines', name='Train Loss',line=dict(color='lightseagreen'))
+    trace_val_loss = go.Scatter(y=history.history['val_loss'], mode='lines', name='Validation Loss',line=dict(color='darkorange'))
+
+    fig = make_subplots(rows=1, cols=1)
+    fig.add_trace(trace_loss, row=1, col=1)
+    fig.add_trace(trace_val_loss, row=1, col=1)
+    
+    fig.update_layout(
+    title_text="Model Training and Validation Loss",
+    xaxis_title="Epoch",
+    yaxis_title="Loss",
+    width=900,
+    height=600,  
+    margin=dict(t=100),
+    plot_bgcolor='white')
+
+    fig.update_xaxes(gridcolor='lightgrey', griddash='dot')
+    fig.update_yaxes(gridcolor='lightgrey', griddash='dot')
+
+    fig.show()
+
+plot_loss(history)
+
+def plot_result(trainY, testY, train_predict, test_predict, Y_ind, X, X_ind):
+    trace_actual = go.Scatter(x=Y_ind, y=trainY, mode='markers', name='Target',marker=dict(color='crimson'))
+    trace_training = go.Scatter(x=X_ind, y=X, mode='markers', name='Training',marker=dict(color='lightseagreen'))
+    trace_prediction = go.Scatter(x=Y_ind, y=train_predict, name='Prediction', mode='markers', marker=dict(color='royalblue'))
+    trace_line = go.Scatter(x=Y_ind, y=train_predict, name='Prediction Fit', mode='lines', line=dict(color='darkorange'))
+
+    fig = make_subplots(rows=1, cols=1)
+    fig.add_trace(trace_actual, row=1, col=1)
+    fig.add_trace(trace_training, row=1, col=1)
+    fig.add_trace(trace_prediction, row=1, col=1)
+    fig.add_trace(trace_line, row=1, col=1)
+
+    fig.update_layout(
+    title_text="Actual and Predicted Values",
+    xaxis_title="Index",
+    yaxis_title="Standardized Consumer Sentiment",
+    width=900,
+    height=600,  
+    margin=dict(t=100),
+    plot_bgcolor='white')
+
+    fig.update_xaxes(gridcolor='lightgrey', griddash='dot')
+    fig.update_yaxes(gridcolor='lightgrey', griddash='dot')
+
+    fig.show()
+
+plot_result(trainY, testY, train_predict, test_predict, trainY_ind, trainX, trainX_ind)
+```
+
+
+## LSTM
+
+The LSTM model's loss graph displays converging training and validation losses, which indicates good learning with minimal overfitting. Predictions closely follow actual sentiment data, showing the model's effectiveness. Despite its complexity with more parameters, the LSTM has slightly higher RMSE scores than the RNN, which may suggest the need for further model optimization.
+
+```{python}
+layer = 50
+epochs = 50
+f_batch = 0.2  
+optimizer = "RMSprop"
+validation_split = 0.2
+
+model = Sequential()
+model.add(
+    LSTM(
+        layer,
+        return_sequences=False,
+        input_shape=(trainX.shape[1], trainX.shape[2]),
+        recurrent_regularizer=regularizers.L2(1e-2),
+        activation="tanh",
+    )
+)
+
+model.add(Dense(units=1, activation="linear"))
+model.compile(loss="MeanSquaredError", optimizer=optimizer)
+model.summary()
+
+history = model.fit(
+    trainX,
+    trainY,
+    epochs=epochs,
+    batch_size=int(f_batch * trainX.shape[0]),
+    validation_split=validation_split,
+    verbose=0,
+)
+
+train_predict = model.predict(trainX).squeeze()
+test_predict = model.predict(testX).squeeze()
+train_rmse = np.sqrt(mean_squared_error(trainY, train_predict))
+test_rmse = np.sqrt(mean_squared_error(testY, test_predict))
+print("Train RMSE = %.5f" % (train_rmse))
+print("Test RMSE = %.5f" % (test_rmse))
+
+def plot_loss(history):
+    trace_loss = go.Scatter(y=history.history['loss'], mode='lines', name='Train Loss',line=dict(color='lightseagreen'))
+    trace_val_loss = go.Scatter(y=history.history['val_loss'], mode='lines', name='Validation Loss',line=dict(color='darkorange'))
+
+    fig = make_subplots(rows=1, cols=1)
+    fig.add_trace(trace_loss, row=1, col=1)
+    fig.add_trace(trace_val_loss, row=1, col=1)
+    
+    fig.update_layout(
+    title_text="Model Training and Validation Loss",
+    xaxis_title="Epoch",
+    yaxis_title="Loss",
+    width=900,
+    height=600,  
+    margin=dict(t=100),
+    plot_bgcolor='white')
+
+    fig.update_xaxes(gridcolor='lightgrey', griddash='dot')
+    fig.update_yaxes(gridcolor='lightgrey', griddash='dot')
+
+    fig.show()
+
+plot_loss(history)
+
+def plot_result(trainY, testY, train_predict, test_predict, Y_ind, X, X_ind):
+    trace_actual = go.Scatter(x=Y_ind, y=trainY, mode='markers', name='Target',marker=dict(color='crimson'))
+    trace_training = go.Scatter(x=X_ind, y=X, mode='markers', name='Training',marker=dict(color='lightseagreen'))
+    trace_prediction = go.Scatter(x=Y_ind, y=train_predict, name='Prediction', mode='markers', marker=dict(color='royalblue'))
+    trace_line = go.Scatter(x=Y_ind, y=train_predict, name='Prediction Fit', mode='lines', line=dict(color='darkorange'))
+
+    fig = make_subplots(rows=1, cols=1)
+    fig.add_trace(trace_actual, row=1, col=1)
+    fig.add_trace(trace_training, row=1, col=1)
+    fig.add_trace(trace_prediction, row=1, col=1)
+    fig.add_trace(trace_line, row=1, col=1)
+
+    fig.update_layout(
+    title_text="Actual and Predicted Values",
+    xaxis_title="Index",
+    yaxis_title="Standardized Consumer Sentiment",
+    width=900,
+    height=600,  
+    margin=dict(t=100),
+    plot_bgcolor='white')
+
+    fig.update_xaxes(gridcolor='lightgrey', griddash='dot')
+    fig.update_yaxes(gridcolor='lightgrey', griddash='dot')
+
+    fig.show()
+
+plot_result(trainY, testY, train_predict, test_predict, trainY_ind, trainX, trainX_ind)
+```
+
+## GRU
+
+The GRU model's losses align well, with minimal overfitting. Predictions accurately track the actual sentiment, indicating strong model performance. With 8,001 parameters, the GRU outperforms the LSTM in error metrics, suggesting a better fit for sentiment analysis.
+
+```{python}
+layer = 50
+epochs = 50
+f_batch = 0.2  
+optimizer = "RMSprop"
+validation_split = 0.2
+
+model = Sequential()
+model.add(
+    GRU(
+        layer,
+        return_sequences=False,
+        input_shape=(trainX.shape[1], trainX.shape[2]),
+        recurrent_regularizer=regularizers.L2(1e-2),
+        activation="tanh",
+    )
+)
+
+model.add(Dense(units=1, activation="linear"))
+model.compile(loss="MeanSquaredError", optimizer=optimizer)
+model.summary()
+
+history = model.fit(
+    trainX,
+    trainY,
+    epochs=epochs,
+    batch_size=int(f_batch * trainX.shape[0]),
+    validation_split=validation_split,
+    verbose=0,
+)
+
+train_predict = model.predict(trainX).squeeze()
+test_predict = model.predict(testX).squeeze()
+train_rmse = np.sqrt(mean_squared_error(trainY, train_predict))
+test_rmse = np.sqrt(mean_squared_error(testY, test_predict))
+print("Train RMSE = %.5f" % (train_rmse))
+print("Test RMSE = %.5f" % (test_rmse))
+
+def plot_loss(history):
+    trace_loss = go.Scatter(y=history.history['loss'], mode='lines', name='Train Loss',line=dict(color='lightseagreen'))
+    trace_val_loss = go.Scatter(y=history.history['val_loss'], mode='lines', name='Validation Loss',line=dict(color='darkorange'))
+
+    fig = make_subplots(rows=1, cols=1)
+    fig.add_trace(trace_loss, row=1, col=1)
+    fig.add_trace(trace_val_loss, row=1, col=1)
+    
+    fig.update_layout(
+    title_text="Model Training and Validation Loss",
+    xaxis_title="Epoch",
+    yaxis_title="Loss",
+    width=900,
+    height=600,  
+    margin=dict(t=100),
+    plot_bgcolor='white')
+
+    fig.update_xaxes(gridcolor='lightgrey', griddash='dot')
+    fig.update_yaxes(gridcolor='lightgrey', griddash='dot')
+
+    fig.show()
+
+plot_loss(history)
+
+def plot_result(trainY, testY, train_predict, test_predict, Y_ind, X, X_ind):
+    trace_actual = go.Scatter(x=Y_ind, y=trainY, mode='markers', name='Target',marker=dict(color='crimson'))
+    trace_training = go.Scatter(x=X_ind, y=X, mode='markers', name='Training',marker=dict(color='lightseagreen'))
+    trace_prediction = go.Scatter(x=Y_ind, y=train_predict, name='Prediction', mode='markers', marker=dict(color='royalblue'))
+    trace_line = go.Scatter(x=Y_ind, y=train_predict, name='Prediction Fit', mode='lines', line=dict(color='darkorange'))
+
+    fig = make_subplots(rows=1, cols=1)
+    fig.add_trace(trace_actual, row=1, col=1)
+    fig.add_trace(trace_training, row=1, col=1)
+    fig.add_trace(trace_prediction, row=1, col=1)
+    fig.add_trace(trace_line, row=1, col=1)
+
+    fig.update_layout(
+    title_text="Actual and Predicted Values",
+    xaxis_title="Index",
+    yaxis_title="Standardized Consumer Sentiment",
+    width=900,
+    height=600,  
+    margin=dict(t=100),
+    plot_bgcolor='white')
+
+    fig.update_xaxes(gridcolor='lightgrey', griddash='dot')
+    fig.update_yaxes(gridcolor='lightgrey', griddash='dot')
+
+    fig.show()
+
+plot_result(trainY, testY, train_predict, test_predict, trainY_ind, trainX, trainX_ind)
+```
+
+## Deep Learning vs. Traditional Time Series 
+
+Deep learning models like RNN, LSTM, and GRU are advanced and able to capture complex, non-linear relationships in data due to their neural network structures. They excel with large datasets and can uncover patterns traditional models might miss. However, they are "black boxes" with less interpretability, and training them requires substantial computational power and data.
+
+Traditional time series models such as ARIMA, ARIMAX, VAR, and ARCH are more straightforward and interpretable. They are designed to work with time series data, explicitly accounting for seasonality, trends, and volatility. These models are computationally lighter and can perform well with smaller datasets. They are often chosen for their interpretability and the clear statistical assumptions they are based on.
