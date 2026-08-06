@@ -57,9 +57,9 @@ We will conduct a brief analysis on the topics of SARIMAX, ARIMAX, and VAR model
 
 -   **Fed Funds Rate, Treasury Yields:** A VAR model that includes variables such as the Federal Funds Rate, 3-Month Yield, 6-Month Yield, 1-Year Yield, 5-Year Yield, 10-Year Yield, and 30-Year Yield can provide insights into the interconnectedness of these financial indicators. For example, an increase in the Federal Funds Rate can have ripple effects on short-term and long-term yields, impacting borrowing costs and investment decisions.
 
-**VAR Model for Monetary Policy and Macroeconomic Indicators:** The Vector Autoregression model is particularly suited for analyzing the interactions between monetary policy and broader macroeconomic indicators. By including variables such as the Federal Funds Rate (FFR), Gross Domestic Product (GDP), Unemployment Rate, Consumer Price Index (CPI), and the 30-Year Mortgage Rate, this model offers a comprehensive view of how monetary policy decisions ripple through the economy. 
+**VAR Model for Monetary Policy and Macroeconomic Indicators:** The Vector Autoregression model is particularly suited for analyzing the interactions between monetary policy and broader macroeconomic indicators. By including variables such as the Federal Funds Rate (FFR), Gross Domestic Product (GDP), Unemployment Rate, Consumer Price Index (CPI), and the 30-Year Mortgage Rate, this model offers a comprehensive view of how monetary policy decisions ripple through the economy.
 
-- **Interactions Among Variables:** The VAR model facilitates the understanding of how a change in the FFR, a key instrument of monetary policy, impacts other significant economic indicators. For example, an increase in the FFR might lead to higher mortgage rates, affecting the housing market and consumer spending. Similarly, changes in the eFFR can influence GDP and unemployment rates, providing insights into the broader economic consequences of monetary policy decisions. This model is invaluable for policymakers and economists in anticipating the effects of monetary policy changes on the overall economy.
+-   **Interactions Among Variables:** The VAR model facilitates the understanding of how a change in the FFR, a key instrument of monetary policy, impacts other significant economic indicators. For example, an increase in the FFR might lead to higher mortgage rates, affecting the housing market and consumer spending. Similarly, changes in the eFFR can influence GDP and unemployment rates, providing insights into the broader economic consequences of monetary policy decisions. This model is invaluable for policymakers and economists in anticipating the effects of monetary policy changes on the overall economy.
 
 In summary, the literature review suggests that the Federal Funds Rate is a central variable that affects both inflation and interest rates. SARIMAX and ARIMAX models can be employed to capture these relationships, while a VAR model can provide a comprehensive view of the interactions among various monetary policy and treasury market variables. These modeling approaches are valuable tools for forecasting and policy analysis in the realm of monetary policy and treasury markets.
 
@@ -964,6 +964,4 @@ ggsave("forecast_plot1.png", plot = forecast_plot1, width = 8, height = 16)
 
 ![](forecast_plot1.png)
 
-
-
-
+## Summary

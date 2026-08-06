@@ -1,5 +1,45 @@
 ---
 title: "Conclusion"
-format: html
+subtitle: "My Deep Dive into How Interest Rates Affect Our Economy"
+date: today
+date-format: long
+format: 
+  html:
+    smooth-scroll: true
+    toc: true
+    toc-expand: 2
+    toc-depth: 5
+    number-sections: true
+    number-depth: 5
+    code-fold: true
+    code-tools: true
+    embed-resources: true
+    mermaid:
+      theme: neutral
+bibliography: citation.bib
+execute: 
+  echo: false
+  warning: false
 ---
 
+{{< video https://www.youtube.com/watch?v=tvINoM7tkXE >}}
+
+I set out on a mission to understand how changes in the Federal Funds Rate, a key interest rate set by central banks, impact different parts of our economy. Using various complex models, I examined how the Federal Funds Rate changes affect things like government bond yields, our nation's overall economic health (GDP), price changes (CPI), unemployment, home loan rates, and the strength of US dollar against other currencies.
+
+My analysis began with a simple yet powerful idea: interest rates are like the engine's throttle of the economy. When the central bank raises rates, it's like pressing a brake pedal. This can slow down the economy, control rising prices (inflation), but also risk reducing business growth and increasing joblessness. On the other hand, lowering interest rates is like stepping on the gas pedal. It can speed up the economy and reduce unemployment but may also lead to too-high prices if not managed carefully.
+
+Looking at the housing market, I found a direct connection to interest rate changes. Higher rates often cool down the housing market, making it more expensive for people to borrow money for homes. Lower rates do the opposite, making homes more affordable but potentially leading to too much borrowing and spending.
+
+On a global scale, the strength of our dollar plays a big role. A strong dollar can be good for buying things from other countries but can make it harder for other countries to buy things from us. Economic crises, like the 2008 financial crisis or the COVID-19 pandemic, can cause big ups and downs in the dollar's value, impacting global trade and investment.
+
+One of the key things I learned was about the tricky balance between controlling inflation and keeping unemployment low. If the focus is too much on reducing inflation, it might increase unemployment. But if not enough attention is given to inflation, prices might rise too fast, affecting the stability of the economy.
+
+Turning to GDP, I saw that its growth is a major sign of how well our economy is doing. A growing GDP usually means more jobs and better incomes, but it needs to be managed to avoid too much inflation or the risk of a recession.
+
+The bond market, especially long-term bonds, gave me insights into what investors think will happen in the future. When central banks raise rates, these long-term yields often go up, as investors want more return on their investments due to expected inflation.
+
+Looking at currency markets, I understood how the value of our dollar compared to other currencies indicates the health of the global economy. Changes in the dollar's value can show how confident people are in the global economic situation and can be influenced by big economic events or crises.
+
+Wrapping up my project, I realized how interconnected everything is — interest rates, inflation, unemployment, GDP growth, and currency markets. They all work together to shape our economic story. This journey through data and models not only improved my understanding but also showed the importance of careful and timely decisions in guiding our economy.
+
+This analysis proves that understanding how monetary policy works and its effects is not just for academics; it's crucial for everyone making decisions in our economy. Reflecting on my findings, I see the huge responsibility in balancing these different economic aspects to ensure a stable and prosperous future for us all.
