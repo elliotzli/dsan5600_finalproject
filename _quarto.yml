@@ -17,7 +17,6 @@ website:
       - section: "Introduction, Data, and Visual Analysis "
         contents:
           - index.qmd
-          - intro.qmd
           - datasource.qmd
           - datavis.qmd
           - eda.qmd

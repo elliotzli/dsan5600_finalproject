@@ -27,7 +27,6 @@ This repository documents an extensive analysis of the impact of the Fed Funds R
 │   ├── forecast_plot.png
 │   ├── forecast_plot1.png
 │   ├── index.html
-│   ├── intro.html
 │   ├── search.json
 │   ├── site_libs
 │   │   ├── bootstrap
@@ -93,17 +92,16 @@ This repository documents an extensive analysis of the impact of the Fed Funds R
 ├── forecast_plot.png
 ├── forecast_plot1.png
 ├── index.qmd
-├── intro.qmd
 └── styles.css
 
-14 directories, 74 files
+13 directories, 74 files
 ```
 
 This repository contains `.qmd` files for analysis, a bibliography file, datasets in Excel format, PDF documents for reference, and image files for visualization.
 
 ### Introduction
 
-The introductory `intro.qmd` addresses the importance of the risk-free rate in the financial ecosystem, with a focus on the Treasury Bill (T-Bill) interest rate as a benchmark. It also clarifies the role of the Federal Reserve in influencing the Fed Funds Rate, which impacts the yield curve and overall interest rates.
+The introductory `index.qmd` addresses the importance of the risk-free rate in the financial ecosystem, with a focus on the Treasury Bill (T-Bill) interest rate as a benchmark. It also clarifies the role of the Federal Reserve in influencing the Fed Funds Rate, which impacts the yield curve and overall interest rates.
 
 ### Data Source and Visualization
 
