@@ -21,6 +21,20 @@ execute:
 
 ```{r setup}
 suppressMessages({library(readxl); library(tseries); library(knitr)})
+library(ggplot2)
+knitr::opts_chunk$set(dev.args = list(bg = "#f4f4f4"))
+theme_set(theme_minimal(base_size = 11) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(colour = "#e0e0e0", linewidth = 0.3),
+        plot.background = element_rect(fill = "#f4f4f4", colour = NA),
+        panel.background = element_rect(fill = NA, colour = NA),
+        legend.background = element_rect(fill = NA, colour = NA),
+        legend.key = element_rect(fill = NA, colour = NA),
+        strip.background = element_rect(fill = NA, colour = NA),
+        plot.title = element_text(size = 11, face = "plain"),
+        axis.title = element_text(size = 9.5, colour = "#555555"),
+        axis.text = element_text(size = 9, colour = "#555555")))
+par(bg = "#f4f4f4")
 
 load_series <- function(file, col) {
   d <- read_excel(file.path("data/data", file))
@@ -92,6 +106,8 @@ eda_panel <- function(nm) {
 This section examines each series before any model is fitted. For each one it shows four things: the series over time, its autocorrelation function (ACF), its partial autocorrelation function (PACF), and the ACF of its first difference. It then applies the augmented Dickey-Fuller test to the level and to the first difference.
 
 The question these tools answer is whether a series is stationary. A stationary series has a constant mean and variance and an autocorrelation that depends only on the lag, so its past behaviour is informative about its future. A series with a unit root does not revert to a mean and must be differenced before it can be modelled with ARMA methods. The answer determines the order of differencing used in the sections that follow.
+
+The series fall into two groups by their relation to the study's question. The three spreads are Treasury yields net of the Federal Funds Rate, so their stationarity is a statement about the policy rate: a spread that reverts to a mean is a market rate that stays a fixed distance from the Federal Reserve's, and one with a unit root is not. The remaining series are the targets the policy rate is expected to influence, and the order of differencing found here is the order used when the policy rate is added to them in the sections that follow.
 
 Twelve series are examined: the three short-term spreads, the three long-maturity yields, and six economic series. The 5-year spread is used only in the ARIMAX section and consumer sentiment only in the deep learning section, so they are examined there. Each series is read from its own source file, described on the data source page, and analysed over its full available sample.
 

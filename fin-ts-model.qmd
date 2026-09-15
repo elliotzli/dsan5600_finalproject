@@ -24,7 +24,19 @@ suppressMessages({
   library(readxl); library(dplyr); library(ggplot2); library(forecast); library(tseries)
   library(rugarch); library(FinTS); library(moments); library(xts); library(knitr); library(lubridate); library(vars); library(fGarch)
 })
-theme_set(theme_minimal(base_size = 11) + theme(panel.grid.minor = element_blank()))
+knitr::opts_chunk$set(dev.args = list(bg = "#f4f4f4"))
+theme_set(theme_minimal(base_size = 11) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(colour = "#e0e0e0", linewidth = 0.3),
+        plot.background = element_rect(fill = "#f4f4f4", colour = NA),
+        panel.background = element_rect(fill = NA, colour = NA),
+        legend.background = element_rect(fill = NA, colour = NA),
+        legend.key = element_rect(fill = NA, colour = NA),
+        strip.background = element_rect(fill = NA, colour = NA),
+        plot.title = element_text(size = 11, face = "plain"),
+        axis.title = element_text(size = 9.5, colour = "#555555"),
+        axis.text = element_text(size = 9, colour = "#555555")))
+par(bg = "#f4f4f4")
 fmt_p <- function(p) ifelse(p < 0.001, "< 0.001", formatC(p, format = "f", digits = 3))
 
 # rugarch specification with an AR(1) mean and the given variance model.
@@ -53,7 +65,7 @@ The models in the preceding sections describe the level of a series. This sectio
 
 ## Data
 
-The series is `DTWEXBGS`, the nominal broad dollar index, daily from 2 January 2006 to 24 November 2023, an index with January 2006 = 100. It is converted to daily log returns in %, $r_t = 100\,(\log P_t - \log P_{t-1})$, which gives 4,487 returns. The index rose from 101.4 to 120.7 over the sample, with a low of 85.5 in July 2011 and a high of 128.3 in September 2022.
+The series is `DTWEXBGS`, the nominal broad dollar index, daily from 2 January 2006 to 24 November 2023, an index with January 2006 = 100. The exchange rate is the channel through which the policy rate reaches net exports: higher U.S. rates relative to other countries draw capital in and raise the dollar. This section models the size of the dollar's daily movements rather than their direction, and the last section before the summary asks what the policy rate contributes to that. It is converted to daily log returns in %, $r_t = 100\,(\log P_t - \log P_{t-1})$, which gives 4,487 returns. The index rose from 101.4 to 120.7 over the sample, with a low of 85.5 in July 2011 and a high of 128.3 in September 2022.
 
 ```{r}
 d <- na.omit(read_excel("data/data/usd.xlsx")); d <- data.frame(Date = as.Date(d[[1]]), v = as.numeric(d[[2]]))

@@ -6,11 +6,10 @@ project:
 website:
   title: "Fed Funds Rate Impact Study"
   sidebar:
-    style: "floating"
+    style: "docked"
     search: true
+    header: theme-sidebar.html
     tools:
-      - icon: house-door-fill
-        href: https://elliotzli.com/
       - icon: github
         href: https://github.com/elliotzli/dsan5600_finalproject
       - icon: linkedin
@@ -38,9 +37,11 @@ format:
   html:
     theme: flatly
     css: styles.css
+    include-in-header: theme-head.html
+    fontsize: 15.5px
     toc: true
     grid:
-      sidebar-width: 250px
-      body-width: 1050px
-      margin-width: 200px
-      gutter-width: 1.5rem
+      sidebar-width: 280px
+      body-width: 1500px
+      margin-width: 280px
+      gutter-width: 1.4rem

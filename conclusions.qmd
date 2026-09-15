@@ -1,41 +1,120 @@
 ---
 title: "Conclusion"
-subtitle: "My Deep Dive into How Interest Rates Affect Our Economy"
-format: 
+subtitle: "What the Models Show About the Federal Funds Rate"
+date: "2023-12-3"
+date-modified: today
+date-format: long
+format:
   html:
     smooth-scroll: true
     toc: true
     toc-expand: 2
-    toc-depth: 5
-    number-sections: true
-    number-depth: 5
     code-fold: true
     code-tools: true
+    lightbox: true
     embed-resources: true
-    mermaid:
-      theme: neutral
 bibliography: citation.bib
-execute: 
+execute:
   echo: false
   warning: false
+  message: false
 ---
 
-I set out on a mission to understand how changes in the Federal Funds Rate, a key interest rate set by central banks, impact different parts of our economy. Using various complex models, I examined how the Federal Funds Rate changes affect things like government bond yields, our nation's overall economic health (GDP), price changes (CPI), unemployment, home loan rates, and the strength of US dollar against other currencies.
+```{r setup}
+suppressMessages({library(knitr); library(dplyr)})
+```
 
-My analysis began with a simple yet powerful idea: interest rates are like the engine's throttle of the economy. When the central bank raises rates, it's like pressing a brake pedal. This can slow down the economy, control rising prices (inflation), but also risk reducing business growth and increasing joblessness. On the other hand, lowering interest rates is like stepping on the gas pedal. It can speed up the economy and reduce unemployment but may also lead to too-high prices if not managed carefully.
+***
+### The Question
 
-Looking at the housing market, I found a direct connection to interest rate changes. Higher rates often cool down the housing market, making it more expensive for people to borrow money for homes. Lower rates do the opposite, making homes more affordable but potentially leading to too much borrowing and spending.
+The project asked how changes in the Federal Funds Rate pass through to the rest of the economy. Fourteen series from the Federal Reserve Bank of St. Louis were assembled at four frequencies and examined with five classes of model: univariate `ARMA` and `ARIMA` models of each series on its own, regressions with `ARIMA` errors that add the policy rate as a predictor, vector autoregressions that treat the policy rate as one variable among several, `ARCH` and `GARCH` models of market volatility, and recurrent neural networks. This page collects what those models found.
 
-On a global scale, the strength of our dollar plays a big role. A strong dollar can be good for buying things from other countries but can make it harder for other countries to buy things from us. Economic crises, like the 2008 financial crisis or the COVID-19 pandemic, can cause big ups and downs in the dollar's value, impacting global trade and investment.
+The short answer is that the policy rate's reach is uneven and slower than the framing on the introduction page suggests. It is visible at the short end of the Treasury curve within weeks, in the macroeconomy over two to three years, and in market volatility only in the months the rate is actually moved. At a one-month horizon it adds nothing to forecasts of inflation, and at any horizon it explains little of what long-maturity yields do. In several places the direction of predictability runs the other way, from markets to the Federal Reserve rather than from the Federal Reserve to markets.
 
-One of the key things I learned was about the tricky balance between controlling inflation and keeping unemployment low. If the focus is too much on reducing inflation, it might increase unemployment. But if not enough attention is given to inflation, prices might rise too fast, affecting the stability of the economy.
+```{r}
+kable(data.frame(
+  Section = c("Exploratory analysis", "ARMA and ARIMA", "ARIMAX, inflation", "ARIMAX, 30-year yield",
+              "VAR, Treasury curve", "VAR, macroeconomy", "ARCH and GARCH", "Deep learning"),
+  `Main result bearing on the Federal Funds Rate` = c(
+    "The three short-maturity spreads are stationary; every other level series has a unit root",
+    "Shocks to the gap between short yields and the policy rate decay with a half-life of 4.1 and 2.3 quarters",
+    "The policy rate lagged twelve months has a coefficient of 0.008 (s.e. 0.009) and adds nothing to forecasts",
+    "A one-point move in the policy rate raises the 30-year yield 0.13 points in the same month",
+    "The policy rate Granger-causes yields out to one year and no further; every yield Granger-causes the policy rate",
+    "A 0.9-point tightening lowers real GDP 0.5% and raises unemployment 0.16 points over two to three years",
+    "Volatility is higher in months the rate moves; volatility Granger-causes rate changes, not the reverse",
+    "The policy rate does not improve one-month forecasts of consumer sentiment in any model class"),
+  check.names = FALSE), row.names = FALSE, caption = "Findings by Section")
+```
 
-Turning to GDP, I saw that its growth is a major sign of how well our economy is doing. A growing GDP usually means more jobs and better incomes, but it needs to be managed to avoid too much inflation or the risk of a recession.
+## Where the Policy Rate's Influence Is Visible
 
-The bond market, especially long-term bonds, gave me insights into what investors think will happen in the future. When central banks raise rates, these long-term yields often go up, as investors want more return on their investments due to expected inflation.
+### The Short End of the Treasury Curve
 
-Looking at currency markets, I understood how the value of our dollar compared to other currencies indicates the health of the global economy. Changes in the dollar's value can show how confident people are in the global economic situation and can be influenced by big economic events or crises.
+The clearest result in the study is also the least surprising. In the vector autoregression on seven monthly interest rates, the Federal Funds Rate Granger-causes the 3-month, 6-month and 1-year Treasury yields, with p-values below 0.001, below 0.001 and 0.012, and does not Granger-cause the 5-, 10- or 30-year yields, with p-values of 0.13, 0.33 and 0.46. The impulse responses put numbers on the same pattern: an unexpected 0.21-point move in the policy rate raises the 3-month yield by 0.16 points on impact and 0.21 points after a year, against 0.05 and 0.11 points for the 30-year. Policy-rate disturbances account for 44% of the 3-month yield's twelve-month forecast error and 13% of the 30-year's.
 
-Wrapping up my project, I realized how interconnected everything is — interest rates, inflation, unemployment, GDP growth, and currency markets. They all work together to shape our economic story. This journey through data and models not only improved my understanding but also showed the importance of careful and timely decisions in guiding our economy.
+The exploratory analysis found the same boundary from a different direction. The spreads between short yields and the policy rate are stationary, with augmented Dickey-Fuller statistics of −8.28, −7.60 and −8.96 at three months, six months and one year, while the long-maturity yields are not stationary in levels at all. A stationary spread means a market rate that stays a fixed distance from the Federal Reserve's; the `ARMA` section estimated how fixed, finding that a shock to the 3-month gap decays with a half-life of 4.1 quarters and a shock to the 6-month gap with a half-life of 2.3 quarters. The single-equation estimate of the pass-through to the 30-year yield, 0.13 points for a one-point move within the month, is the same conclusion in the form the visualization page's chart raises: the four long-maturity lines move almost as one, but not with the overnight rate.
 
-This analysis proves that understanding how monetary policy works and its effects is not just for academics; it's crucial for everyone making decisions in our economy. Reflecting on my findings, I see the huge responsibility in balancing these different economic aspects to ensure a stable and prosperous future for us all.
+None of this requires a subtle explanation. A three-month bill and an overnight loan are close substitutes, so arbitrage holds them together. A thirty-year bond is priced from expectations of policy over three decades and a term premium, and today's overnight rate is a small part of that.
+
+### The Macroeconomy
+
+The quarterly vector autoregression on output, prices, unemployment, the policy rate and the mortgage rate is the one model in the study that produces something like a measure of monetary policy's effect on the economy. The policy rate Granger-causes all four of the other variables, with p-values below 0.001 for output and the mortgage rate, 0.002 for prices and 0.004 for unemployment. An unexpected 0.9-point tightening leaves real GDP unchanged for two quarters, then lowers it to 0.5% below baseline at two to three years, with a bootstrap band that excludes zero from the third quarter; unemployment rises 0.16 points over the same period; the 30-year mortgage rate rises 0.19 points on impact and 0.37 points after two quarters, about 40% of the policy move, then decays with it.
+
+Two features of these results are worth stating plainly. The first is the timing. Nothing happens to output for two quarters and the effect peaks after three years, which is a slower profile than the transmission map on the introduction page implies and is the reason the single-equation regressions in this study find so little. The second is the mortgage rate, which is the fastest and largest of the four responses and the one channel where the policy rate's influence on a household-facing price is unambiguous.
+
+The price level is the exception. It rises after a tightening, by 0.63% at two years, with a band that excludes zero. This is a known result in this literature, called the price puzzle, and the usual reading is that the policy rate rises when the Federal Reserve expects inflation that a five-variable system cannot see, so what the model calls a policy shock is partly anticipation. The data set contains no measure of expected inflation, so the study cannot separate the two.
+
+### Market Volatility
+
+The `GARCH` section found no relationship between the *level* of the policy rate and the volatility of either the dollar or the stock market, and a clear relationship with the *size* of the Federal Reserve's moves. In the daily variance equation for the dollar, the absolute change in the month's policy rate is a significant regressor, with a likelihood-ratio p-value of 0.012, raising the conditional standard deviation by about 6% in a month with a 0.25-point move; the coefficient on the rate level is zero to four decimals. At monthly frequency the pattern is stronger and holds for both markets. Dollar volatility averages 1.50% in the 160 months the rate changed against 1.29% in the 52 it did not; S&P 500 volatility averages 4.86% in months the rate was raised and 3.58% when it was unchanged, and its correlation with the size of the month's move is 0.65.
+
+The largest readings belong to the months the rate was cut: 1.91% for the dollar and 8.98% for the S&P 500, two and a half times the unchanged-month average in both cases. That ordering is the clue to what the relationship is. The cuts in this sample are 2007–2008, 2019 and March 2020, so the months of highest volatility are the months of financial stress that the Federal Reserve was cutting into, not months made volatile by the cuts.
+
+## Where the Policy Rate's Influence Is Not Visible
+
+Three sections looked for a short-horizon relationship between the policy rate and a target and did not find one.
+
+The inflation regression is the clearest case. The policy rate lagged twelve months has a coefficient of 0.008 with a standard error of 0.009 and lowers no forecast error: over 246 rolling origins the root mean squared error is 0.2877 without the regressor and 0.2879 with it. Replacing the twelve-month lag with a one-month lag produces a coefficient of 0.042 that is significant at any conventional level and makes the out-of-sample forecasts *worse* at every horizon. Both results are what a reaction function produces rather than what transmission produces: the Federal Reserve raises the rate when inflation is high, so the rate and inflation are correlated in the direction that has no causal reading and no forecasting value.
+
+The deep-learning section reached the same conclusion on a different target with a different model class. Consumer sentiment's correlation with the policy rate is −0.04 in levels and 0.03 in monthly changes. Adding twelve months of the policy rate to a recurrent network lowers its training error and raises its test error, by 4% for the simple recurrent network and 3% for the long short-term memory network; in the `ARIMAX` model the policy rate is worth 0.013 index points of root mean squared error, a gain 82 test months cannot distinguish from zero.
+
+The long end of the Treasury curve is the third case, already described: no Granger causality from the policy rate at five years or beyond, and a same-month pass-through to the 30-year yield of about an eighth.
+
+## The Pattern That Runs Through the Study
+
+Three sections, using three different methods on three different data sets, found the direction of predictability running from markets to the Federal Reserve rather than the reverse.
+
+In the yield-curve vector autoregression, every one of the six Treasury yields Granger-causes the Federal Funds Rate, with p-values below 0.003 at all six maturities, while the policy rate Granger-causes only the three shortest. In the `GARCH` section, monthly dollar volatility Granger-causes the change in the policy rate, with a p-value of 0.002 at two lags, while the change in the policy rate does not help predict dollar volatility at any lag order tested. In the macroeconomic system, output Granger-causes the policy rate at p = 0.023 and prices at p = 0.052.
+
+The explanation is the same in all three. The Federal Open Market Committee meets eight times a year and moves the rate in response to data that the market has already seen and priced. A Treasury yield embeds the market's expectation of what the Committee will do; a month of turbulent currency trading is the kind of condition the Committee responds to at its next meeting. So at horizons of a month or two the policy rate is the variable being predicted, not the predictor. The effects that run the other way are real but appear at the horizons the macroeconomic impulse responses show: quarters, not weeks.
+
+This is the study's central finding and it qualifies the premise it started from. The Federal Funds Rate is not a throttle whose movements propagate outward on contact. It is the short end of a curve that the market prices in advance, and an instrument whose effect on output, employment and prices is measurable but slow.
+
+## How Well the Models Forecast
+
+Little of this study's value is in its forecasts, and the results are consistent about why.
+
+The models that beat a naive benchmark do so by small margins. The yield-curve vector autoregression improves on a random walk by 6% one step ahead and 2% at twelve months, entirely at the short end. The `ARIMAX` model of the 30-year yield lowers root mean squared error by 1 to 2%, and that gain is conditional on knowing the Federal Reserve's actual move. On consumer sentiment, nine methods from a naive forecast to a 4,500-parameter network produce one-step errors between 4.46 and 4.72 index points, a spread of 6%, with the two `ARIMA` models at the better end and the networks indistinguishable from assuming no change.
+
+Two models forecast worse than the benchmark they were meant to improve on. The macroeconomic vector autoregression's policy-rate forecasts over 2007–2023 are less accurate than a random walk, which is what fitting 1971–2007 dynamics to a period containing seven years at the zero bound produces. The 3-month spread's `AR(1)` is beaten at horizons beyond one quarter by a model that differences the series, because the spread's mean shifted from −0.62 in the 1980s to −0.10 from 1990 and a constant-mean model cannot follow it.
+
+The `GARCH` models are the exception. Volatility, unlike direction, is genuinely predictable: the retained model for the dollar has the lowest error of six methods over 1,346 out-of-sample days on both loss functions used, and its value-at-risk quantiles are exceeded at the expected rate. That is the one place in the study where a model would be worth using.
+
+## What the Study Cannot Establish
+
+The central limitation is that the data set contains no measure of monetary policy *surprises*. The Federal Funds Rate used throughout is `FEDFUNDS`, a monthly average of the effective rate. A rate change that markets had fully anticipated moves nothing on the day it is announced, and one that surprises them moves a great deal; a monthly average cannot tell the two apart. Every causal statement in this study therefore rests on Granger causality and on the ordering imposed in the impulse responses, both of which identify effects from the sequence of observations in time rather than from any independent measure of what the Federal Reserve did that markets did not expect. A daily series of policy surprises, constructed from federal funds futures around Federal Open Market Committee announcements, would be the single most valuable addition to the data set.
+
+Three further limits bear on specific results. The effective rate sat at the floor of its target range from 2009 to 2015 and again from 2020 to 2022, and the models treat those years as ordinary observations of a freely moving rate; the poor out-of-sample performance of the macroeconomic vector autoregression over that period is the visible consequence. The macroeconomic system has five variables and 209 quarters, which is adequate for two lags but leaves wide bootstrap bands at long horizons and, without a measure of expected inflation, cannot resolve the price puzzle. And the short-maturity yields in the yield-curve system are reconstructed by adding the policy rate back to the published spreads, so they differ from the published constant-maturity yields by the averaging convention.
+
+## Extensions
+
+Four extensions follow directly from what the models found.
+
+A vector error-correction model would suit the Treasury curve better than the vector autoregression used here. The exploratory analysis established the necessary condition: the yields are individually non-stationary while the spreads between them and the policy rate are stationary, which is the signature of a system with stable long-run relationships and short-run deviations from them. A model that imposes those relationships would sharpen the long-horizon impulse responses and the forecasts.
+
+A policy-surprise series would change the character of the whole study, turning Granger-causal statements into estimates of the effect of an unanticipated policy move, and would allow the `GARCH` variance equation to test whether it is policy *news* rather than policy *action* that raises volatility.
+
+A measure of expected inflation, or a commodity-price index, added to the macroeconomic system would test the standard explanation of the price puzzle directly.
+
+And the recurrent networks would deserve a fairer test on a richer problem. They were applied here to a 547-month survey index whose best one-step forecast is close to its last value, which is the case in which their flexibility has nothing to work on. A multivariate target at higher frequency, where nonlinearity and many inputs are both present, is where the architecture has an advantage over the linear alternatives that this study's data could not demonstrate.

@@ -28,10 +28,12 @@ from keras.layers import Dense, SimpleRNN, LSTM, GRU
 from keras.callbacks import EarlyStopping
 from statsmodels.tsa.arima.model import ARIMA
 from statsmodels.tsa.stattools import adfuller, acf, pacf
-from scipy import stats
 from IPython.display import Markdown, display
 tf.config.experimental.enable_op_determinism()
-plt.rcParams.update({"figure.dpi": 110, "axes.grid": True, "grid.alpha": 0.3, "axes.spines.top": False, "axes.spines.right": False})
+plt.rcParams.update({"figure.dpi": 110, "axes.grid": True, "grid.alpha": 0.3, "axes.spines.top": False, "axes.spines.right": False,
+    "figure.facecolor": "#f4f4f4", "axes.facecolor": "#f4f4f4", "savefig.facecolor": "#f4f4f4",
+    "axes.edgecolor": "#555555", "text.color": "#111111", "axes.labelcolor": "#555555", "xtick.color": "#555555", "ytick.color": "#555555",
+    "font.size": 9.5, "axes.titlesize": 10.5})
 
 def tbl(df, caption=None, floatfmt=".3f"):
     md = df.to_markdown(index=False, floatfmt=floatfmt).replace("nan", "")
@@ -166,11 +168,11 @@ ax.plot(td, results[("GRU", "with FFR")][0]["pred"], color="darkorange", lw=1, l
 ax.set_title("Consumer Sentiment, Actual and One-Step-Ahead Forecasts, Test Period"); ax.set_xlabel("Year"); ax.set_ylabel("Index, 1966 Q1 = 100"); ax.legend(frameon=False, ncol=3, fontsize=8)
 plt.tight_layout(); plt.show()
 e_rnn = results[("RNN", "univariate")][0]["pred"] - yt; e_nv = naive - yt
-d = e_rnn ** 2 - e_nv ** 2; dm = d.mean() / np.sqrt(d.var(ddof=1) / len(d))
-print(f"Diebold-Mariano test, RNN (seed 0) against naive, squared-error loss, h = 1: statistic {dm:.2f}, p = {2 * (1 - stats.norm.cdf(abs(dm))):.3f}.")
+print(f"Mean squared error, RNN (seed 0): {np.mean(e_rnn ** 2):.3f}.  Naive: {np.mean(e_nv ** 2):.3f}.  "
+      f"Standard deviation of the per-month difference in squared error: {(e_rnn ** 2 - e_nv ** 2).std(ddof=1):.3f} over {len(yt)} months.")
 ```
 
-The nine forecasts are within 6% of one another, and the naive forecast is in the middle of them. The univariate `RNN` and `LSTM` have test RMSEs of 4.538 and 4.539 index points against 4.537 for the naive forecast, and the `GRU` 4.558; the differences among the three networks are within their seed-to-seed standard deviations of 0.02 to 0.04. The two ARIMA models are the most accurate, `ARIMA(2,1,1)` at 4.476 and `ARIMAX(2,1,1)` with the policy rate at 4.463, 1.4% and 1.6% below the naive forecast. The Diebold-Mariano test of the `RNN` against the naive forecast gives a statistic of −0.14 and p = 0.89: there is no evidence that the network's one-step forecasts are more accurate than assuming no change.
+The nine forecasts are within 6% of one another, and the naive forecast is in the middle of them. The univariate `RNN` and `LSTM` have test RMSEs of 4.538 and 4.539 index points against 4.537 for the naive forecast, and the `GRU` 4.558; the differences among the three networks are within their seed-to-seed standard deviations of 0.02 to 0.04. The two ARIMA models are the most accurate, `ARIMA(2,1,1)` at 4.476 and `ARIMAX(2,1,1)` with the policy rate at 4.463, 1.4% and 1.6% below the naive forecast. The gap between the `RNN` and the naive forecast is far smaller than the month-to-month variation in that gap: mean squared errors of 20.38 and 20.58, a difference of 0.21, against a standard deviation of 13.2 in the monthly difference over 82 months. Nothing here separates the network from assuming no change.
 
 Adding the Federal Funds Rate as a second input makes the `RNN` and `LSTM` worse, by 4% and 3% of RMSE, and leaves the `GRU` unchanged, 4.541 against 4.558. The training RMSE falls in each case, from 3.76 to 3.60 for the `RNN`, so the extra input is fitted in the training period and does not transfer: with a correlation between the two series of 0.03 in changes, what the network learns from the policy rate is noise. In the ARIMA framework the policy rate is worth 0.013 of RMSE, a gain too small to distinguish from zero on 82 months.
 
@@ -213,11 +215,11 @@ The policy rate does not help either model class predict sentiment a month ahead
 ## Summary
 
 ```{python}
-display(tbl(pd.DataFrame({"Item": ["Target", "Test period", "Networks", "Inputs", "Seeds", "Best network, one step", "Best model, one step", "Best model, twelve steps", "Federal Funds Rate", "Diebold-Mariano, RNN vs. naive"],
+display(tbl(pd.DataFrame({"Item": ["Target", "Test period", "Networks", "Inputs", "Seeds", "Best network, one step", "Best model, one step", "Best model, twelve steps", "Federal Funds Rate", "RNN against naive, one step"],
   "Result": ["Consumer sentiment, monthly, 1978–2023, 547 observations", "October 2016 to July 2023, 82 months, one step ahead", "RNN, LSTM, GRU; one layer of 32 units, Adam, early stopping",
              "Previous 12 months of sentiment; or of sentiment and the Federal Funds Rate", "Five per model; RMSE reported as mean, s.d. 0.02–0.08",
              "RNN, univariate: RMSE 4.54 (naive 4.54)", "ARIMAX(2,1,1) with FFR: RMSE 4.46; ARIMA(2,1,1): 4.48", "RNN: RMSE 12.3 (naive 13.1, ARIMA 12.6)",
-             "Adds nothing to one-step accuracy in either model class", "p = 0.89"]}), "Retained Results"))
+             "Adds nothing to one-step accuracy in either model class", "Mean squared error 20.38 against 20.58; no separation"]}), "Retained Results"))
 ```
 
 ### What the Section Found
@@ -232,4 +234,4 @@ For this series the linear models are the right tool and the networks are a chec
 
 ### Limitations
 
-The test period is 82 months and includes one extreme event, so the RMSE ranking is sensitive to a few observations; a Diebold-Mariano test rejects none of the differences. The networks were tuned only lightly, with one architecture, one window length and one learning rate, and a search over those settings could change the margins, though not, on this evidence, the conclusion. The recursive multi-step forecasts of the networks use the seed-0 models only. The ARIMA order was chosen once on the training period and held fixed while the coefficients were re-estimated each month; the networks were not re-estimated during the test period, which favours the ARIMA slightly at the one-step horizon.
+The test period is 82 months and includes one extreme event, so the RMSE ranking is sensitive to a few observations; the differences between methods are far smaller than the variation in the monthly errors. The networks were tuned only lightly, with one architecture, one window length and one learning rate, and a search over those settings could change the margins, though not, on this evidence, the conclusion. The recursive multi-step forecasts of the networks use the seed-0 models only. The ARIMA order was chosen once on the training period and held fixed while the coefficients were re-estimated each month; the networks were not re-estimated during the test period, which favours the ARIMA slightly at the one-step horizon. The finding that the Federal Funds Rate adds nothing is a statement about a one-month horizon and about the contemporaneous and twelve-month-lagged rate as inputs; it does not rule out an effect on sentiment at the longer lags at which the macroeconomic vector autoregression finds the policy rate reaching output and unemployment.

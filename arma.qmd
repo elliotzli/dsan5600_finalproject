@@ -24,7 +24,19 @@ suppressMessages({
   library(readxl); library(dplyr); library(lubridate); library(ggplot2)
   library(forecast); library(tseries); library(astsa); library(knitr)
 })
-theme_set(theme_minimal(base_size = 11) + theme(panel.grid.minor = element_blank()))
+knitr::opts_chunk$set(dev.args = list(bg = "#f4f4f4"))
+theme_set(theme_minimal(base_size = 11) +
+  theme(panel.grid.minor = element_blank(),
+        panel.grid.major = element_line(colour = "#e0e0e0", linewidth = 0.3),
+        plot.background = element_rect(fill = "#f4f4f4", colour = NA),
+        panel.background = element_rect(fill = NA, colour = NA),
+        legend.background = element_rect(fill = NA, colour = NA),
+        legend.key = element_rect(fill = NA, colour = NA),
+        strip.background = element_rect(fill = NA, colour = NA),
+        plot.title = element_text(size = 11, face = "plain"),
+        axis.title = element_text(size = 9.5, colour = "#555555"),
+        axis.text = element_text(size = 9, colour = "#555555")))
+par(bg = "#f4f4f4")
 
 # Coefficient table, information criteria and Ljung-Box p-values for one fit.
 report <- function(fit, lags = c(8, 12, 20)) {
@@ -107,13 +119,15 @@ adf_line <- function(x, label) {
 
 This section fits univariate models to four series: the Consumer Price Index, real GDP, and the quarterly averages of the 3-month and 6-month Treasury bill spreads over the Federal Funds Rate. Each series follows the same sequence. The order of differencing is set from the augmented Dickey-Fuller test and the autocorrelation function, the autoregressive and moving-average orders are identified from the ACF and PACF of the stationary series, a grid of candidate orders is estimated and ranked by AIC, AICc and BIC, and the ranking is compared with the selection made by `auto.arima` [@hyndman2008]. The retained model is then checked for coefficient significance and residual autocorrelation, used to forecast, compared with four benchmark methods, and, for the two spreads, tested by rolling-origin cross-validation.
 
+The four series stand in different relations to the study's question. The two spreads are the Federal Funds Rate relationship measured directly: each is a Treasury yield minus the policy rate on the same day, so a model of the spread is a model of how far the short end of the curve sits from where the Federal Reserve has set it. CPI and real GDP are the two variables the Federal Reserve's mandate is written over, and the models here establish what each looks like on its own, before the ARIMAX and VAR sections add the policy rate to them. Nothing in this section uses the policy rate as an input; that is the next section's subject.
+
 Two points apply throughout. Information criteria are comparable only among models fitted to the same differenced series, so a model with d = 1 cannot be ranked against one with d = 2 by AIC; where the two appear together the comparison is made on diagnostics and out-of-sample error instead. The benchmark tables report training-set errors, which measure fit, not forecast accuracy; the cross-validation tables measure forecast accuracy.
 
 ## Consumer Price Index
 
 ### Data
 
-The series is `CPIAUCSL`, monthly and seasonally adjusted, from January 1947 to August 2023, 920 observations. It is modelled in logarithms so that differences are approximately percentage changes and the variance does not grow with the level.
+The series is `CPIAUCSL`, monthly and seasonally adjusted, from January 1947 to August 2023, 920 observations. It is modelled in logarithms so that differences are approximately percentage changes and the variance does not grow with the level. Inflation is one of the Federal Reserve's two mandate variables and the one the policy rate is most often moved to control; this section describes its own dynamics, and the ARIMAX section tests whether the policy rate adds to them.
 
 ```{r}
 df <- na.omit(read_excel("data/data/cpi-u.xlsx"))
@@ -200,7 +214,7 @@ The errors are in log units on the training set. `ARIMA(0,2,2)` has the lowest R
 
 ### Data
 
-The series is `GDPC1`, quarterly, seasonally adjusted, from the first quarter of 1947 to the second quarter of 2023, 306 observations. It is modelled in logarithms.
+The series is `GDPC1`, quarterly, seasonally adjusted, from the first quarter of 1947 to the second quarter of 2023, 306 observations. It is modelled in logarithms. Output is the channel through which a change in the policy rate is expected to reach prices and employment, with a lag of several quarters; the macroeconomic vector autoregression in the next section estimates that response, and the model here provides the univariate baseline it improves on.
 
 ```{r}
 df <- na.omit(read_excel("data/data/GDP.xlsx"))
@@ -503,6 +517,12 @@ Three of the four retained models have residuals that pass the Ljung-Box test at
 Against the benchmark methods on the training set, the retained model has the lowest RMSE for all four series. The margins differ. For CPI the model's RMSE is 60% of the naive method's and 80% of the drift method's. For GDP the model and the drift method are within 1% of each other, which is expected since the model is a drift model with a small correction. For the spreads the model's RMSE is 4% and 7% below the naive method's, a small margin, and the mean-percentage measures are not informative because both series cross zero.
 
 The rolling-origin cross-validation on the spreads gives the only out-of-sample evidence. For the 6-month spread `AR(1)` has the lowest error at every horizon from one to four quarters, with a one-step MAE of 0.116 points. For the 3-month spread `AR(1)` is competitive one step ahead, with a mean squared error of 0.0197 against 0.0195 for the best alternative, but at four quarters ahead its MAE of 0.212 is above the 0.156 of a differenced `SARIMA(1,1,1)(2,1,1)[4]`. The cause is a shift in the spread's mean, from −0.62 over 1982–1989 to −0.10 since 1990, which a constant-mean model cannot accommodate: every forecast is pulled toward a mean estimated from a sample that includes the 1980s. The differenced model avoids that by carrying the current level forward, but it does so through a moving-average coefficient of −1.00, which is the estimator undoing the differencing, and its residuals fail the Ljung-Box test at lag 8. The `AR(1)` is retained as the correctly identified model, with the caveat that its multi-quarter forecasts for the 3-month spread would be improved by a mean estimated on the post-1990 sample or by a model that allows the mean to shift.
+
+### The Federal Funds Rate
+
+The policy rate does not appear as a variable in this section, but two of the four series are defined by it. The 3-month and 6-month spreads are yields net of the policy rate, so the `AR(1)` results say something about the relationship directly: a shock to the gap between the short end of the curve and the Federal Reserve's rate has a half-life of 4.1 quarters at three months and 2.3 at six, and the gap has no trend, which is what arbitrage between an overnight rate and a bill of a few months' maturity implies. The estimated mean of each spread is the average distance the market has kept from the policy rate over forty years, −0.20 points at three months and indistinguishable from zero at six. The shift in the 3-month mean, from −0.62 in the 1980s to −0.10 from 1990, is the clearest sign in this section that the relationship between market rates and the policy rate has not been constant.
+
+CPI and real GDP enter as the mandate variables the policy rate is set to influence. Their univariate models are the baselines the following sections measure against when the policy rate is added.
 
 ### Limitations
 

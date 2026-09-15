@@ -58,7 +58,8 @@ fig.update_layout(
     xaxis_title="Date",
     yaxis_title="Spread (% points)",
     width=900, height=600, margin=dict(t=100),
-    plot_bgcolor='white',
+    plot_bgcolor='#f4f4f4',
+    paper_bgcolor='#f4f4f4',
     yaxis_range=[-6, 5],
 )
 fig.add_hline(y=0, line_width=1, line_color="grey")
@@ -75,7 +76,7 @@ fig.show()
 
 ### Long-Maturity Yields and the Mortgage Rate
 
-The long end of the curve is shown as yields, not spreads. The 10-year, 20-year, and 30-year constant-maturity yields are plotted with the 30-year fixed mortgage rate, all in %. The 20-year line breaks between 1987 and 1993, the years in which the Treasury did not publish a 20-year constant-maturity yield.
+The long end of the curve is shown as yields, not spreads. The spread convention is dropped here because the Federal Reserve's rate is a poor reference point at these maturities: a 30-year yield is priced from expectations of policy over three decades plus a term premium, so the gap between it and today's overnight rate is not a quantity with a stable meaning. The question this chart raises, how far the policy rate reaches along the curve, is answered in the ARIMAX section. The 10-year, 20-year, and 30-year constant-maturity yields are plotted with the 30-year fixed mortgage rate, all in %. The 20-year line breaks between 1987 and 1993, the years in which the Treasury did not publish a 20-year constant-maturity yield.
 
 ```{python}
 df = pd.read_excel('data/data/t-bill-vs-econ-index.xlsx')
@@ -93,7 +94,8 @@ fig1.update_layout(
     xaxis_title="Date",
     yaxis_title="Yield (%)",
     width=900, height=600, margin=dict(t=100),
-    plot_bgcolor='white',
+    plot_bgcolor='#f4f4f4',
+    paper_bgcolor='#f4f4f4',
 )
 fig1.update_xaxes(gridcolor='lightgrey', griddash='dot')
 fig1.update_yaxes(gridcolor='lightgrey', griddash='dot')
@@ -133,7 +135,8 @@ fig2.update_layout(
     xaxis_title="Date",
     yaxis_title="Rate or change (%)",
     width=900, height=600, margin=dict(t=100),
-    plot_bgcolor='white',
+    plot_bgcolor='#f4f4f4',
+    paper_bgcolor='#f4f4f4',
 )
 fig2.add_hline(y=0, line_width=1, line_color="grey")
 fig2.update_xaxes(gridcolor='lightgrey', griddash='dot')
