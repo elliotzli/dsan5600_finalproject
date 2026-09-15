@@ -1,12 +1,18 @@
 ---
 title: "Introduction"
 subtitle: "Central Bank, Interest Rates, and the Economy"
+date: "2023-12-3"
+date-modified: today
+date-format: long
 format: 
   html:
+    smooth-scroll: true
     toc: true
     code-fold: true
     code-tools: true
     embed-resources: true
+    lightbox: true
+    mermaid-format: png
     mermaid:
       theme: neutral
 bibliography: citation.bib
@@ -14,99 +20,157 @@ execute:
   echo: false
   warning: false
 ---
+::: {.transmission-map}
 ```{mermaid}
-flowchart LR
-  A[Fed Funds Rate] --> B[Treasury Yields]
-  B --> C(Treasury Bill)
-  C --> D(3 Months Bill)
-  C --> E(6 Months Bill)
-  C --> F(1 Year Bill)
-  D --> OI(Short Term Economic Trend)
-  E --> OI
-  F --> OI
-  B --> G(Treasury Note)
-  G --> H(5 Year Note)
-  G --> I(10 Year Note)
-  B --> J(Treasury Bond)
-  J --> K(20 Year Bond)
-  J --> L(30 Year Bond)
-  K --> M(30 Year Mortgage Rate)
-  L --> M
-  A --> A1[Macro-Economy]
-  A1 --> A2(GDP)
-  A2 --> A4(Consumption)
-  A4 --> A8(CPI)
-  A4 --> A9(Consumer Sentiment)
-  A2 --> A6(Govt Spending)
-  A2 --> A5(Investment)
-  A2 --> A7(Net Export)
-  A7 --> A10(US Dollar Index)
-  A1 --> A11(Unemployment Rate)
-  A1 --> A12(Stock Market)
-  A12 --> A13(S&P 500)
-  A8 --> A14(Long Term Economic Trend)
-  A9 --> A14(Long Term Economic Trend)
-  A6 --> A14(Long Term Economic Trend)
-  A5 --> A14(Long Term Economic Trend)
-  A10 --> A14(Long Term Economic Trend)
-  A13 --> A14(Long Term Economic Trend)
-  M --> A14(Long Term Economic Trend)
-  
+%%| fig-width: 14
+%%| fig-height: 16
+%%| fig-cap: "Fed Funds Rate transmission map"
+%%{init: {"flowchart": {"diagramPadding": 30, "nodeSpacing": 40, "rankSpacing": 70}}}%%
+flowchart TB
+  %% ---- indicator classes ----
+  classDef policy fill:#e2e3e5,stroke:#495057,stroke-width:2px
+  classDef market fill:#dbe9f6,stroke:#1f5f99
+  classDef lead   fill:#d4edda,stroke:#28a745
+  classDef coin   fill:#fff3cd,stroke:#d39e00
+  classDef lag    fill:#f8d7da,stroke:#dc3545
+
+  %% ---- subgraph boxes ----
+  style TS    fill:#ffffde,stroke:#aaaa33
+  style GDP   fill:#ffffde,stroke:#aaaa33
+  style BILLS fill:#ffffff,stroke:#999999
+  style NOTES fill:#ffffff,stroke:#999999
+  style BONDS fill:#ffffff,stroke:#999999
+
+  FF[Fed Funds Rate]:::policy
+
+  %% ---- Treasury yield curve (classification, not causation) ----
+  subgraph TS["Treasury Yield Curve"]
+    direction LR
+    subgraph BILLS["Bills (< 1Y)"]
+      B3(3M Bill):::market --- B6(6M Bill):::market --- B12(1Y Bill):::market
+    end
+    subgraph NOTES["Notes (2–10Y)"]
+      N2(2Y Note):::market --- N5(5Y Note):::market --- N10(10Y Note):::market
+    end
+    subgraph BONDS["Bonds (20–30Y)"]
+      L20(20Y Bond):::market --- L30(30Y Bond):::market
+    end
+  end
+
+  %% ---- GDP identity (composition, not causation) ----
+  subgraph GDP["GDP = C + I + G + NX"]
+    direction LR
+    C(Consumption):::coin
+    INV(Investment):::coin
+    G(Govt Spending):::policy
+    NX(Net Export):::coin
+  end
+
+  %% ---- other nodes ----
+  SPR(Yield Curve Spread<br/>10Y − 2Y / 10Y − 3M):::lead
+  MTG(30Y Mortgage Rate):::lead
+  PERM(Building Permits):::lead
+  SPX(S&P 500):::lead
+  SENT(Consumer Expectations):::lead
+  CLAIMS(Initial Jobless Claims):::lead
+  DXY(US Dollar Index):::market
+  UN(Unemployment Rate):::lag
+  CPI(CPI):::lag
+
+  %% ---- Fed → curve: strong at short end, weak at long end ----
+  FF ==> B3
+  FF --> N2
+  FF -.->|expectations + term premium| N10
+  FF -.-> L30
+
+  %% ---- yield-curve slope as a leading signal ----
+  B3 & N2 & N10 --> SPR
+
+  %% ---- rates → real economy (transmission channels) ----
+  N10 --> MTG --> PERM --> INV
+  N10 -->|borrowing cost| INV
+  N10 -->|discount rate| SPX
+  FF -->|rate differential| DXY --> NX
+
+  %% ---- sentiment & consumption ----
+  CPI -->|erodes real income| C
+  SENT --> C
+  CPI --> SENT
+  UN --> SENT
+  SPX -->|wealth effect| SENT
+
+  %% ---- labor market: claims lead, unemployment lags ----
+  GDP --> CLAIMS --> UN
+  UN -.->|Phillips curve| CPI
+
+  %% ---- feedback: the Fed reacts to lagging data ----
+  CPI ==>|dual mandate| FF
+  UN ==> FF
+
+  %% ---- leading indicators → the cycle ----
+  SPR & SPX & SENT & PERM & CLAIMS -.-> GDP
 ```
+
+::: {.diagram-legend}
+- <span class="swatch sw-policy"></span> **Grey** — policy instrument (Fed Funds Rate, government spending)
+- <span class="swatch sw-market"></span> **Blue** — market rates and transmission channels
+- <span class="swatch sw-lead"></span> **Green** — leading indicators (turn 3–12 months before the economy)
+- <span class="swatch sw-coin"></span> **Yellow** — coincident indicators (move with the economy)
+- <span class="swatch sw-lag"></span> **Red** — lagging indicators (turn after the economy)
+- **Thick arrows** — strongest channels
+- **Dotted arrows** — leading indicators feeding into GDP
+:::
+:::
 
 ***
 ### Statement of Purpose
 
-This project seeks to investigate the potential effects of fluctuations in the Fed Funds Rate on various sectors of the economy. Specifically, it aims to analyze the impact on key sectors such as the bond market, stock market, exchange rates, inflation rates, and unemployment rates. By examining these relationships, we can gain valuable insights into the broader economic dynamics influenced by changes in the Fed Funds Rate.
+This project examines how changes in the Federal Funds Rate pass through to other parts of the U.S. economy. The series covered are Treasury yields and spreads across the curve, real GDP, CPI inflation, the unemployment rate, the 30-year mortgage rate, the U.S. dollar index, the S&P 500, and consumer sentiment. This page describes the channels involved; the map above includes nodes such as jobless claims and building permits that place the modelled series in context but are not themselves modelled. Later sections test the channels with time series models: univariate ARMA models, regressions and vector autoregressions with the Federal Funds Rate, a GARCH model of dollar volatility, and recurrent neural networks.
+
+The starting point is the @harvardlawreview note on the Federal Reserve's rate increase of March 22, 2023, *Federal Reserve --- U.S. Monetary Policy Shows the Major Issues with the Major Questions Doctrine*
 
 {{< video https://www.youtube.com/watch?v=R8VBRCs2jTU >}}
 
-
-
 ### Central Bank
 
-The Central Bank, widely acknowledged as a preeminent authority in the financial sector, exercises profound influence over the economy. In an era of global interconnectivity, even minute actions by central banks can reverberate across distant economies. Therefore, it is imperative to examine their roles, tools, and execution. Well-known central banks include **The Federal Reserve System (the Fed)**, the Bank of England, the European Central Bank (ECB).
+A central bank is the institution responsible for a country's monetary policy. In the United States this is the Federal Reserve System. Other examples are the Bank of England and the European Central Bank. The main tools are the policy interest rate, the size of the balance sheet, and guidance about future policy. Because the dollar is the main funding and reserve currency, Federal Reserve decisions also affect borrowing costs and exchange rates outside the United States.
 
 ### Interest Rate
 
-Interest rates are central banks' potent tools that play a significant role in the domestic and global economy. As depicted in the flow chart, when interest rates are raised, it leads to a short-term reduction in consumption, investment, government spending, and net exports, resulting in GDP contraction. However, in the long term, it tends to curb inflation. Conversely, when interest rates are lowered, the opposite effect occurs, stimulating economic activity. This illustrates how central banks manipulate interest rates to influence economic conditions.
+The policy rate is the central bank's primary tool. A higher rate raises the cost of borrowing for households and firms. Consumption and investment slow, and GDP growth slows with them. Inflation responds later, usually with a lag of a year or more. A lower rate works in the opposite direction.
 
 ### Fed Funds Rate
 
-The Fed Funds Rate, set by the U.S. Federal Reserve, is the rate at which banks lend to each other overnight and significantly influences other interest rates in the economy, including those of Treasury securities. When the Fed changes this rate, it impacts borrowing costs, affecting spending and investment throughout the economy. This shift alters demand for Treasury securities, changing their yields and subsequently influencing the shape of the Treasury Yield Curve, which is viewed as an indicator of future economic conditions. In essence, the Fed Funds Rate indirectly sways the Treasury securities market and the broader economic outlook through its influence on borrowing costs and investment.
+The Federal Funds Rate is the overnight rate at which banks lend reserves to each other. The Federal Open Market Committee sets a target range for it at eight scheduled meetings a year. It is the shortest rate in the economy and the anchor for the rest of the yield curve. Bills maturing within a year track it closely. Longer maturities respond less directly, since their yields also reflect expected future policy, expected inflation, and a term premium. Longer-term yields in turn set borrowing costs for mortgages and corporate debt and the discount rate applied to equities.
 
-![](data/plot/fed-fund-rate.png){width="80%"}
-
-[Link](https://www.nytimes.com/live/2023/09/20/business/fed-meeting-interest-rates)
+```{=html}
+<iframe src="https://fred.stlouisfed.org/graph/graph-landing.php?g=1Y7Dg&width=670&height=475" scrolling="no" frameborder="0" style="overflow:hidden; width:670px; height:525px;" allowTransparency="true" loading="lazy"></iframe>
+```
 
 ### Gross Domestic Product
 
-GDP = Consumption + Investment + Government Spending + Net Exports
+GDP is the sum of consumption, investment, government spending, and net exports. Consumption is roughly two-thirds of the total. Rate changes reach GDP mainly through investment (housing and business capital spending) and consumption (credit costs and the wealth effect from asset prices). Net exports respond through the exchange rate: higher U.S. rates relative to other countries strengthen the dollar, which makes imports cheaper and exports more expensive.
 
-The Federal Reserve's adjustments to the Federal Funds Rate, the interest rate at which banks lend to each other overnight, wield significant influence over the broader economy. When the Fed raises this rate, borrowing costs throughout the economy tend to rise, often dampening spending and investment and subsequently slowing economic growth, while potentially curbing inflation. Conversely, when the Fed lowers the rate, borrowing generally becomes less costly, encouraging spending and investment, potentially boosting economic growth but also risking heightened inflation. Therefore, the Fed's policy decisions on the Federal Funds Rate carefully navigate between stimulating economic activity and maintaining control over inflation.
+GDP is a coincident indicator. It is published quarterly, about a month after the quarter ends, and is revised for several years afterward.
 
 ### Risk-Free Rate
 
-The risk-free rate refers to the expected return of an investment that bears no risk, unaffected by factors like inflation. Widely recognized benchmarks, such as the London Interbank Offered Rate (LIBOR) and the U.S. Treasury Bond Yield Curve, are often associated with this rate due to their strong economic backing and perceived low-risk nature.
+The risk-free rate is the return on an asset with no default risk. In practice U.S. Treasury yields are used, with the maturity matched to the horizon in question: the 3-month bill for short horizons and the 10-year note for longer ones. The rate is nominal and therefore includes expected inflation. The real risk-free rate is observed from Treasury Inflation-Protected Securities (TIPS). LIBOR served as the short-term benchmark for decades but was discontinued in June 2023 and replaced by SOFR, which is based on overnight Treasury repo transactions.
 
 ### U.S. Treasury Securities
 
-U.S. Treasury securities, encompassing Treasury Bills (T-Bills), Treasury Bonds, and Treasury Notes, are pivotal financial instruments utilized by the federal government for capital-raising to fund its obligations. T-Bills, with maturities ranging from four to fifty-two weeks, are sold at a discount and are considered ultra short-term; Treasury Bonds have a much longer maturity of up to thirty years, and Treasury Notes feature mid-range maturities between two and ten years. Both bonds and notes pay semi-annual interest. Backed by the U.S. government's credit, these securities are deemed low-risk, making them appealing to investors seeking capital preservation, especially in economically uncertain times. T-Bills, often utilized as a benchmark in financial markets, hold particular significance due to their inherent stability and impact on various economic metrics and monetary policy.
+The Treasury issues three types of marketable debt. Bills mature in 4 to 52 weeks, are sold at a discount, and pay no coupon. Notes mature in 2, 3, 5, 7, or 10 years. Bonds mature in 20 or 30 years. Notes and bonds pay interest semi-annually. All three are backed by the full faith and credit of the U.S. government and are treated as free of default risk. The Treasury market is the largest and most liquid bond market in the world, and its yields serve as reference rates for most other dollar borrowing. The 10-year note is the most widely quoted. The 30-year mortgage rate, for example, is priced as a spread over the 10-year yield rather than over the 30-year bond, because most mortgages are repaid or refinanced well before maturity.
 
 ### Treasury Yield Curve
 
-The Treasury Yield Curve is a graph that shows the interest rates of U.S. government bonds and how they change for different time periods. Imagine a line that usually goes up, meaning investors get higher interest if they agree to lend money for a longer time. This line can provide hints about future economic conditions. If the line flips and goes down, meaning short-term interest rates are higher than long-term ones, it might suggest economic trouble ahead. People watch this curve because it helps them guess what might happen with interest rates and the economy in the future.
+The yield curve plots Treasury yields against maturity on a given day. It normally slopes upward, since investors require more yield to lend for longer. The slope is usually summarized as a spread, most often the 10-year yield minus the 2-year yield or the 10-year minus the 3-month. An inverted curve, where short yields exceed long yields, has preceded every U.S. recession since the late 1960s, typically by 6 to 18 months. This makes the spread one of the most closely watched leading indicators. The Federal Funds Rate sets the short end of the curve directly. The long end is set by the market.
 
-![](data/plot/t-bill-yield-curve.png){width="80%"}
+```{=html}
+<iframe src="https://fred.stlouisfed.org/graph/graph-landing.php?g=1YABc&width=670&height=475" scrolling="no" frameborder="0" style="overflow:hidden; width:670px; height:525px;" allowTransparency="true" loading="lazy"></iframe>
+```
 
-[Link](https://www.ustreasuryyieldcurve.com/)
+@treasuryinterestrates
 
 ### Summary
 
-The interest rate serves as a pivotal tool in the Federal Reserve's arsenal for regulating economic conditions. A key concept within this realm is the risk-free rate, which denotes an interest rate shielded from external risks and exposures. Typically, market participants turn to benchmarks such as LIBOR or the Treasury Bill (T-Bill) interest rate when seeking a risk-free rate, primarily due to their inherently low risk profile. Notably, the T-Bill rate is not a fixed figure prescribed by the Treasury Department; instead, it fluctuates in accordance with the prices of various T-Bills traded on the secondary market.
-
-However, a common query arises: If the market determines the risk-free rate, why do people frequently attribute changes in interest rates to actions taken by the Federal Reserve? The answer lies in the Federal Reserve's influence over the overnight interest rate, known as the Fed Funds Rate. This rate plays a significant role in the yield curve, particularly when examining the curve at a very short-term horizon (i.e., when x equals 0.0001). Consequently, when individuals refer to the Federal Reserve raising or lowering interest rates, they are typically alluding to the central bank's actions pertaining to the Fed Funds Rate.
-
-**This project is inspried by the work of Harvard Law Review "FEDERAL RESERVE --- U.S. MONETARY POLICY SHOWS THE MAJOR ISSUES WITH THE MAJOR QUESTIONS DOCTRINE. --- Federal Reserve Interest Rate Hike on March 22, 2023."**
-
-@hls
+The Federal Reserve sets the Federal Funds Rate. Short-maturity Treasury yields follow it closely, and long-maturity yields follow it partially, adjusted for expectations and term premium. Those yields set borrowing costs across the economy, and borrowing costs move investment, consumption, asset prices, and the exchange rate. Employment and inflation respond last. Since the Fed's mandate variables are lagging indicators, the Fed relies on leading indicators such as the yield curve spread, equity prices, and jobless claims to judge where the economy is heading. The remaining sections of this project test these relationships in the data.

@@ -6,7 +6,6 @@
 
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
 
-<meta name="dcterms.date" content="2026-09-14">
 
 <title>Conclusion – Fed Funds Rate Impact Study</title>
 <style>
@@ -4038,7 +4037,46 @@ vertical-align: -.125em;
 <style>html{ scroll-behavior: smooth; }</style>
 
 
-<style type="text/css"></style>
+<style type="text/css">
+
+.quarto-figure img.figure-img,
+figure.figure img.figure-img {
+max-width: 100%;
+height: auto !important;
+}
+
+.diagram-legend {
+font-size: 0.9rem;
+color: #555;
+max-width: 48rem;
+margin: -0.5rem auto 2rem auto;
+}
+.diagram-legend ul { list-style: none; padding-left: 0; }
+.diagram-legend li { margin-bottom: 0.25rem; }
+.swatch {
+display: inline-block;
+width: 0.9em; height: 0.9em;
+margin-right: 0.4em;
+vertical-align: -0.1em;
+border-radius: 2px;
+border: 1px solid;
+}
+.swatch.sw-policy { background: #e2e3e5; border-color: #495057; }
+.swatch.sw-market { background: #dbe9f6; border-color: #1f5f99; }
+.swatch.sw-lead { background: #d4edda; border-color: #28a745; }
+.swatch.sw-coin { background: #fff3cd; border-color: #d39e00; }
+.swatch.sw-lag { background: #f8d7da; border-color: #dc3545; }
+
+.transmission-map figure.figure { text-align: center; }
+.transmission-map img.figure-img {
+max-width: 72%;
+height: auto !important;
+display: inline-block;
+}
+@media (max-width: 991px) {
+.transmission-map img.figure-img { max-width: 100%; }
+}
+</style>
 </head>
 
 <body class="nav-sidebar floating quarto-light">
@@ -4066,7 +4104,8 @@ vertical-align: -.125em;
     <div class="pt-lg-2 mt-2 text-left sidebar-header">
     <div class="sidebar-title mb-0 py-0">
       <a href="./">Fed Funds Rate Impact Study</a> 
-        <div class="sidebar-tools-main">
+        <div class="sidebar-tools-main tools-wide">
+    <a href="https://elliotzli.com/" title class="quarto-navigation-tool px-1" aria-label><i class="bi bi-house-door-fill"></i></a>
     <a href="https://github.com/elliotzli/dsan5600_finalproject" title class="quarto-navigation-tool px-1" aria-label><i class="bi bi-github"></i></a>
     <a href="https://www.linkedin.com/in/zhengze-li-90517b193/" title class="quarto-navigation-tool px-1" aria-label><i class="bi bi-linkedin"></i></a>
 </div>
@@ -4127,19 +4166,19 @@ vertical-align: -.125em;
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./arma.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">ARMA/ARIMA/SARIMA</span></a>
+ <span class="menu-text">ARMA, ARIMA and SARIMA Models</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./arimax.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">ARIMAX/SARIMAX/VAR</span></a>
+ <span class="menu-text">ARIMAX and VAR Models</span></a>
   </div>
 </li>
           <li class="sidebar-item">
   <div class="sidebar-item-container"> 
   <a href="./fin-ts-model.html" class="sidebar-item-text sidebar-link">
- <span class="menu-text">Financial Time Series Models (ARCH/GARCH)</span></a>
+ <span class="menu-text">ARCH and GARCH Models</span></a>
   </div>
 </li>
           <li class="sidebar-item">
@@ -4190,12 +4229,6 @@ vertical-align: -.125em;
 <div class="quarto-title-meta">
 
     
-    <div>
-    <div class="quarto-title-meta-heading">Published</div>
-    <div class="quarto-title-meta-contents">
-      <p class="date">September 14, 2026</p>
-    </div>
-  </div>
   
     
   </div>
@@ -4205,7 +4238,6 @@ vertical-align: -.125em;
 </header>
 
 
-<div class="quarto-video ratio ratio-16x9"><iframe data-external="1" src="https://www.youtube.com/embed/tvINoM7tkXE" title frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe></div>
 <p>I set out on a mission to understand how changes in the Federal Funds Rate, a key interest rate set by central banks, impact different parts of our economy. Using various complex models, I examined how the Federal Funds Rate changes affect things like government bond yields, our nation’s overall economic health (GDP), price changes (CPI), unemployment, home loan rates, and the strength of US dollar against other currencies.</p>
 <p>My analysis began with a simple yet powerful idea: interest rates are like the engine’s throttle of the economy. When the central bank raises rates, it’s like pressing a brake pedal. This can slow down the economy, control rising prices (inflation), but also risk reducing business growth and increasing joblessness. On the other hand, lowering interest rates is like stepping on the gas pedal. It can speed up the economy and reduce unemployment but may also lead to too-high prices if not managed carefully.</p>
 <p>Looking at the housing market, I found a direct connection to interest rate changes. Higher rates often cool down the housing market, making it more expensive for people to borrow money for homes. Lower rates do the opposite, making homes more affordable but potentially leading to too much borrowing and spending.</p>
@@ -4676,48 +4708,44 @@ vertical-align: -.125em;
 <div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1" data-shortcodes="false"><pre class="sourceCode markdown code-with-copy"><code class="sourceCode markdown"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
 <span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="an">title:</span><span class="co"> &quot;Conclusion&quot;</span></span>
 <span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="an">subtitle:</span><span class="co"> &quot;My Deep Dive into How Interest Rates Affect Our Economy&quot;</span></span>
-<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="an">date:</span><span class="co"> today</span></span>
-<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="an">date-format:</span><span class="co"> long</span></span>
-<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="an">format:</span><span class="co"> </span></span>
-<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co">  html:</span></span>
-<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co">    smooth-scroll: true</span></span>
-<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co">    toc: true</span></span>
-<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="co">    toc-expand: 2</span></span>
-<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="co">    toc-depth: 5</span></span>
-<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="co">    number-sections: true</span></span>
-<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="co">    number-depth: 5</span></span>
-<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="co">    code-fold: true</span></span>
-<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="co">    code-tools: true</span></span>
-<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="co">    embed-resources: true</span></span>
-<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="co">    mermaid:</span></span>
-<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="co">      theme: neutral</span></span>
-<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="an">bibliography:</span><span class="co"> citation.bib</span></span>
-<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="an">execute:</span><span class="co"> </span></span>
-<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a><span class="co">  echo: false</span></span>
-<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a><span class="co">  warning: false</span></span>
-<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="an">format:</span><span class="co"> </span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="co">  html:</span></span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a><span class="co">    smooth-scroll: true</span></span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a><span class="co">    toc: true</span></span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a><span class="co">    toc-expand: 2</span></span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a><span class="co">    toc-depth: 5</span></span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a><span class="co">    number-sections: true</span></span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a><span class="co">    number-depth: 5</span></span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a><span class="co">    code-fold: true</span></span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="co">    code-tools: true</span></span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a><span class="co">    embed-resources: true</span></span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a><span class="co">    mermaid:</span></span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a><span class="co">      theme: neutral</span></span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a><span class="an">bibliography:</span><span class="co"> citation.bib</span></span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a><span class="an">execute:</span><span class="co"> </span></span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a><span class="co">  echo: false</span></span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="co">  warning: false</span></span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a><span class="co">---</span></span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a>I set out on a mission to understand how changes in the Federal Funds Rate, a key interest rate set by central banks, impact different parts of our economy. Using various complex models, I examined how the Federal Funds Rate changes affect things like government bond yields, our nation&#39;s overall economic health (GDP), price changes (CPI), unemployment, home loan rates, and the strength of US dollar against other currencies.</span>
 <span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>{{&lt; video https://www.youtube.com/watch?v=tvINoM7tkXE &gt;}}</span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>My analysis began with a simple yet powerful idea: interest rates are like the engine&#39;s throttle of the economy. When the central bank raises rates, it&#39;s like pressing a brake pedal. This can slow down the economy, control rising prices (inflation), but also risk reducing business growth and increasing joblessness. On the other hand, lowering interest rates is like stepping on the gas pedal. It can speed up the economy and reduce unemployment but may also lead to too-high prices if not managed carefully.</span>
 <span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>I set out on a mission to understand how changes in the Federal Funds Rate, a key interest rate set by central banks, impact different parts of our economy. Using various complex models, I examined how the Federal Funds Rate changes affect things like government bond yields, our nation&#39;s overall economic health (GDP), price changes (CPI), unemployment, home loan rates, and the strength of US dollar against other currencies.</span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a>Looking at the housing market, I found a direct connection to interest rate changes. Higher rates often cool down the housing market, making it more expensive for people to borrow money for homes. Lower rates do the opposite, making homes more affordable but potentially leading to too much borrowing and spending.</span>
 <span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>My analysis began with a simple yet powerful idea: interest rates are like the engine&#39;s throttle of the economy. When the central bank raises rates, it&#39;s like pressing a brake pedal. This can slow down the economy, control rising prices (inflation), but also risk reducing business growth and increasing joblessness. On the other hand, lowering interest rates is like stepping on the gas pedal. It can speed up the economy and reduce unemployment but may also lead to too-high prices if not managed carefully.</span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a>On a global scale, the strength of our dollar plays a big role. A strong dollar can be good for buying things from other countries but can make it harder for other countries to buy things from us. Economic crises, like the 2008 financial crisis or the COVID-19 pandemic, can cause big ups and downs in the dollar&#39;s value, impacting global trade and investment.</span>
 <span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>Looking at the housing market, I found a direct connection to interest rate changes. Higher rates often cool down the housing market, making it more expensive for people to borrow money for homes. Lower rates do the opposite, making homes more affordable but potentially leading to too much borrowing and spending.</span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>One of the key things I learned was about the tricky balance between controlling inflation and keeping unemployment low. If the focus is too much on reducing inflation, it might increase unemployment. But if not enough attention is given to inflation, prices might rise too fast, affecting the stability of the economy.</span>
 <span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>On a global scale, the strength of our dollar plays a big role. A strong dollar can be good for buying things from other countries but can make it harder for other countries to buy things from us. Economic crises, like the 2008 financial crisis or the COVID-19 pandemic, can cause big ups and downs in the dollar&#39;s value, impacting global trade and investment.</span>
+<span id="cb1-33"><a href="#cb1-33" aria-hidden="true" tabindex="-1"></a>Turning to GDP, I saw that its growth is a major sign of how well our economy is doing. A growing GDP usually means more jobs and better incomes, but it needs to be managed to avoid too much inflation or the risk of a recession.</span>
 <span id="cb1-34"><a href="#cb1-34" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>One of the key things I learned was about the tricky balance between controlling inflation and keeping unemployment low. If the focus is too much on reducing inflation, it might increase unemployment. But if not enough attention is given to inflation, prices might rise too fast, affecting the stability of the economy.</span>
+<span id="cb1-35"><a href="#cb1-35" aria-hidden="true" tabindex="-1"></a>The bond market, especially long-term bonds, gave me insights into what investors think will happen in the future. When central banks raise rates, these long-term yields often go up, as investors want more return on their investments due to expected inflation.</span>
 <span id="cb1-36"><a href="#cb1-36" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>Turning to GDP, I saw that its growth is a major sign of how well our economy is doing. A growing GDP usually means more jobs and better incomes, but it needs to be managed to avoid too much inflation or the risk of a recession.</span>
+<span id="cb1-37"><a href="#cb1-37" aria-hidden="true" tabindex="-1"></a>Looking at currency markets, I understood how the value of our dollar compared to other currencies indicates the health of the global economy. Changes in the dollar&#39;s value can show how confident people are in the global economic situation and can be influenced by big economic events or crises.</span>
 <span id="cb1-38"><a href="#cb1-38" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>The bond market, especially long-term bonds, gave me insights into what investors think will happen in the future. When central banks raise rates, these long-term yields often go up, as investors want more return on their investments due to expected inflation.</span>
+<span id="cb1-39"><a href="#cb1-39" aria-hidden="true" tabindex="-1"></a>Wrapping up my project, I realized how interconnected everything is — interest rates, inflation, unemployment, GDP growth, and currency markets. They all work together to shape our economic story. This journey through data and models not only improved my understanding but also showed the importance of careful and timely decisions in guiding our economy.</span>
 <span id="cb1-40"><a href="#cb1-40" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>Looking at currency markets, I understood how the value of our dollar compared to other currencies indicates the health of the global economy. Changes in the dollar&#39;s value can show how confident people are in the global economic situation and can be influenced by big economic events or crises.</span>
-<span id="cb1-42"><a href="#cb1-42" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-43"><a href="#cb1-43" aria-hidden="true" tabindex="-1"></a>Wrapping up my project, I realized how interconnected everything is — interest rates, inflation, unemployment, GDP growth, and currency markets. They all work together to shape our economic story. This journey through data and models not only improved my understanding but also showed the importance of careful and timely decisions in guiding our economy.</span>
-<span id="cb1-44"><a href="#cb1-44" aria-hidden="true" tabindex="-1"></a></span>
-<span id="cb1-45"><a href="#cb1-45" aria-hidden="true" tabindex="-1"></a>This analysis proves that understanding how monetary policy works and its effects is not just for academics; it&#39;s crucial for everyone making decisions in our economy. Reflecting on my findings, I see the huge responsibility in balancing these different economic aspects to ensure a stable and prosperous future for us all.</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal><i class="bi"></i></button></div>
+<span id="cb1-41"><a href="#cb1-41" aria-hidden="true" tabindex="-1"></a>This analysis proves that understanding how monetary policy works and its effects is not just for academics; it&#39;s crucial for everyone making decisions in our economy. Reflecting on my findings, I see the huge responsibility in balancing these different economic aspects to ensure a stable and prosperous future for us all.</span></code></pre></div><button title="Copy to Clipboard" class="code-copy-button" data-in-quarto-modal><i class="bi"></i></button></div>
 </div></div></div></div></div>
 </div> <!-- /content -->
 

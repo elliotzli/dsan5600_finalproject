@@ -1,8 +1,6 @@
 ---
 title: "Conclusion"
 subtitle: "My Deep Dive into How Interest Rates Affect Our Economy"
-date: today
-date-format: long
 format: 
   html:
     smooth-scroll: true
@@ -21,8 +19,6 @@ execute:
   echo: false
   warning: false
 ---
-
-{{< video https://www.youtube.com/watch?v=tvINoM7tkXE >}}
 
 I set out on a mission to understand how changes in the Federal Funds Rate, a key interest rate set by central banks, impact different parts of our economy. Using various complex models, I examined how the Federal Funds Rate changes affect things like government bond yields, our nation's overall economic health (GDP), price changes (CPI), unemployment, home loan rates, and the strength of US dollar against other currencies.
 

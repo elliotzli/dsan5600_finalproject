@@ -1,1040 +1,509 @@
 ---
-title: "ARMA/ARIMA/SARIMA"
-subtitle: "Stationarity, Differencing, Model Fitting, Diagnostics, Forcasting, and Validation"
-format:   
+title: "ARMA, ARIMA and SARIMA Models"
+subtitle: "Stationarity, Identification, Estimation, Diagnostics, Forecasting and Validation"
+date: "2023-12-3"
+date-modified: today
+date-format: long
+format:
   html:
     smooth-scroll: true
     toc: true
     code-fold: true
     code-tools: true
+    lightbox: true
     embed-resources: true
-    mermaid:
-      theme: neutral
 bibliography: citation.bib
-execute: 
+execute:
   echo: false
   warning: false
+  message: false
 ---
 
-```{r}
-library(zoo)
-library(TTR)
-library(readr)
-library(readxl)
-library(tidyverse)
-library(ggplot2)
-library(forecast)
-library(astsa) 
-library(xts)
-library(tseries)
-library(fpp2)
-library(fma)
-library(lubridate)
-library(TSstudio)
-library(quantmod)
-library(tidyquant)
-library(plotly)
-library(knitr)
-```
-
-## ARIMA - CPI
-
-I choose the `ARIMA` model for forecasting economic indicators because it's useful for forecasting a series where the data points are independent of the seasonal components, which is the case with the economic indicators such as `CPI`, `GDP`, `USD index`, `unemployment rate`, and `mortgage rate`. These indicators typically have underlying trends or cycles that ARIMA can address through differencing, making the data stationary before applying auto-regressive and moving average components to capture the relationships in the data.
-
-### Data Processing
-
-```{r}
-df <- read_excel('data/data/cpi-u.xlsx')
-df <- na.omit(df)
-df$Date <- as.Date(df[[1]])
-df$Yield <- as.numeric(df[[2]])
-ts = ts(df$Yield, start=decimal_date(as.Date("1947-01-01")), frequency = 12)
-autoplot(ts) + ggtitle("CPI Over Time") + xlab("Year") + ylab("CPI") + 
-    theme(
-    panel.background = element_blank())
-```
-
-<br>
-
-### Stationarity Check
-
-Initial assessments via `ACF` and `Augmented Dickey-Fuller` tests indicated that `CPI` required differencing due to non-stationarity. After converting to a time series and applying logarithmic transformation, first differencing was insufficient in detrending, but second differencing indicated stationarity.
-
-```{r}
-ggAcf(log(ts),40) + ggtitle("ACF Plot") + 
-    theme(
-    panel.background = element_blank())
-
-adf_test <- adf.test(ts)
-cat("Augmented Dickey-Fuller Test Results:\n")
-cat("Test Statistic:", adf_test$statistic, " ","P-value:", adf_test$p.value)
-if (adf_test$p.value < 0.05) {
-  cat("The time series is stationary based on the ADF test.\n")
-} else {
-  cat("The time series is not stationary based on the ADF test.\n")}
-cat("\n********************************************************************************************\n")
-ts <- log(ts)
-ts_diff <- ts %>% diff()
-ts_diff2 <- ts %>% diff() %>% diff()
-ggAcf(ts_diff,40) + ggtitle("ACF Plot After Differencing") + theme(panel.background = element_blank())
-ggPacf(ts_diff,40) + ggtitle("PACF Plot After Differencing") + theme(panel.background = element_blank())
-ggAcf(ts_diff2,40) + ggtitle("ACF Plot After Second Differencing") + theme(panel.background = element_blank())
-ggPacf(ts_diff2,40) + ggtitle("PACF Plot After Second Differencing") + theme(panel.background = element_blank())
-```
-
-<br>
-
-### Model Fitting
-
-After second differencing `CPI`, ACF shows three lags, while PACF shows four. This suggests ARIMA parameters `p = [0,1,2,3]`, `d = [2]`, `q = [0,1,2]`. I'll test these for the lowest `AIC`, `BIC`, and `AICc`, and cross-check with `auto.arima` to forecasting.
-
-```{r}
-i=1
-
-temp= data.frame()
-ls=matrix(rep(NA,6*12),nrow=12)
-
-
-for (p in 0:3)
-{
-  for(q in 0:2)
-  {
-    for(d in 2)
-    {
-      
-      if(p+d+q<=8)
-      {
-        model<- Arima(ts,order=c(p,d,q))
-        ls[i,]= c(p,d,q,model$aic,model$bic,model$aicc)
-        i=i+1
-
-      }
-      
-    }
-  }
-}
-
-temp= as.data.frame(ls)
-names(temp)= c("p","d","q","AIC","BIC","AICc")
-aic_row <- paste("Model fitting with minimum AIC:\n", toString(temp[which.min(temp$AIC),]))
-aicc_row <- paste("\nModel fitting with minimum AICc:\n", toString(temp[which.min(temp$AICc),]))
-bic_row <- paste("\nModel fitting with minimum BIC:\n", toString(temp[which.min(temp$BIC),]))
-all_rows <- paste(aic_row, aicc_row, bic_row, sep="\n")
-cat(all_rows)
-```
-
-**auto.arima**
-
-```{r}
-auto.arima(ts)
-```
-
-<br>
-
-### Model Diagnostics
-
-The `ARIMA(3,2,2)` model exhibits a satisfactory fit, evident from the patternless residuals and lack of autocorrelation, but its coefficients are not all statistically significant. In contrast, the `ARIMA(0,2,2)` model, while equally displaying white noise residuals and minimal autocorrelation, boasts statistically significant coefficients, lending greater weight to its predictive accuracy. The `SARIMA(1,2,1)(2,0,0)[12]` also presents a strong fit, confirmed by its residuals and significant p-values, and it outperforms the `ARIMA(0,2,2)` model in terms of lower AIC, BIC, and AICc values. Nonetheless, the simpler `ARIMA(0,2,2)` is preferred due to its adequate fit and less complexity. Both models are considered robust, with the choice between them hinging on the trade-off between simplicity and statistical thoroughness.
-
-```{r}
-model_output1 <- capture.output(sarima((ts),3,2,2))
-model_output1[74:105]
-```
-
-```{r}
-model_output2 <- capture.output(sarima((ts),0,2,2))
-model_output2[21:49]
-```
-
-```{r}
-model_output3 <- capture.output(sarima((ts),1,2,1,2,0,0,12))
-model_output3[29:59]
-```
-
-<br>
-
-Equation for `ARIMA(0,2,2)`:
-
-$$(1 - B)^2 X_t = (1 + \theta_1 B + \theta_2 B^2) W_t$$ <br>
-
-```{r}
-fit <- Arima(ts, order=c(0,2,2))
-summary(fit)
-```
-
-<br>
-
-### Forecasting
-
-The graph depicts the predicted logarithm of CPI over time, extending from historical data into future projections. The black line represents the actual historical log(CPI) values, showing a general upward trend over time, which indicates that the CPI has been increasing. The blue shaded area starting around 2020 represents the forecasted values, with the shade indicating the confidence interval of the predictions.
-
-```{r}
-ts %>%
-  Arima(order=c(0,2,2)) %>%
-  forecast(h=60) %>%
-  autoplot() +
-  ylab("Prediction") + xlab("Year") + ggtitle("log(CPI) Prediction") + theme(panel.background = element_blank())
-```
-
-<br>
-
-### Benchmark Method
-
-The ARIMA model forecasts (red line) are closest to the actual data, indicating a superior fit among the methods. Accuracy metrics support this, with ARIMA showing the lowest error rates across the board, suggesting high precision and minimal bias in forecasting. Other models like the Mean, Naive, and Seasonal Naive exhibit higher errors, indicating less accurate predictions. The Drift model performs better than these but is still outclassed by ARIMA. Overall, ARIMA is identified as the best model for forecasting CPI in this case.
-
-```{r}
-cat("ARIMA Model Accuracy Metrics:\n")
-pred <- forecast(fit, 60)
-acc_pred <- accuracy(pred)
-print(acc_pred)
-
-cat("\nMean Model Accuracy Metrics:\n")
-f1 <- meanf(ts, h=60)
-acc_f1 <- accuracy(f1)
-print(acc_f1)
-
-cat("\nNaive Model Accuracy Metrics:\n")
-f2 <- naive(ts, h=60)
-acc_f2 <- accuracy(f2)
-print(acc_f2)
-
-cat("\nSeasonal Naive Model Accuracy Metrics:\n")
-f3 <- snaive(ts, h=60)
-acc_f3 <- accuracy(f3)
-print(acc_f3)
-
-cat("\nRandom Walk with Drift Model Accuracy Metrics:\n")
-f4 <- rwf(ts, drift=TRUE, h=60)
-acc_f4 <- accuracy(f4)
-print(acc_f4)
-
-all_acc <- data.frame(
-  ARIMA = acc_pred[1, ],
-  Mean = acc_f1[1, ],
-  Naive = acc_f2[1, ],
-  SeasonalNaive = acc_f3[1, ],
-  Drift = acc_f4[1, ]
-)
-
-all_acc <- t(all_acc)
-lowest_scores <- apply(all_acc, 2, function(x) {
-  names(which.min(x))
+```{r setup}
+suppressMessages({
+  library(readxl); library(dplyr); library(lubridate); library(ggplot2)
+  library(forecast); library(tseries); library(astsa); library(knitr)
 })
-cat("\nModel with the best Accuracy Metrics:\n",lowest_scores)
+theme_set(theme_minimal(base_size = 11) + theme(panel.grid.minor = element_blank()))
 
-autoplot(ts) +
-  autolayer(meanf(ts, h=60),
-            series="Mean", PI=FALSE) +
-  autolayer(naive(ts, h=60),
-            series="Naïve", PI=FALSE) +
-  autolayer(snaive(ts, h=60),
-            series="SNaïve", PI=FALSE)+
-  autolayer(rwf(ts, h=60, drift=TRUE),
-            series="Drift", PI=FALSE)+
-  autolayer(forecast(fit,60), 
-            series="ARIMA",PI=FALSE) +
-  guides(colour=guide_legend(title="Forecast")) +
-  ylab("Prediction") + xlab("Year") + ggtitle("Benchmark Evaluation") + theme(panel.background = element_blank())
-```
+# Coefficient table, information criteria and Ljung-Box p-values for one fit.
+report <- function(fit, lags = c(8, 12, 20)) {
+  se <- sqrt(diag(fit$var.coef))
+  z  <- coef(fit) / se
+  k  <- length(coef(fit)) - any(names(coef(fit)) %in% c("intercept", "drift"))
+  tab <- data.frame(Coefficient = names(coef(fit)), Estimate = round(coef(fit), 4),
+                    `Std. Error` = round(se, 4), z = round(z, 2), p = formatC(2 * pnorm(-abs(z)), format = "f", digits = 4),
+                    check.names = FALSE)
+  lb <- sapply(lags, function(L) Box.test(residuals(fit), lag = L, type = "Ljung-Box", fitdf = k)$p.value)
+  cat(sprintf("AIC %.2f   AICc %.2f   BIC %.2f   residual s.d. %.4f\n", fit$aic, fit$aicc, fit$bic, sqrt(fit$sigma2)))
+  cat(sprintf("Ljung-Box p-value at lag %d: %.3f", lags, lb), sep = "   "); cat("\n")
+  kable(tab, row.names = FALSE, align = "lrrrr")
+}
 
-## ARIMA - GDP
+# Residual diagnostic panel from astsa, without the optimiser trace.
+diag_plot <- function(x, p, d, q, P = 0, D = 0, Q = 0, S = -1) {
+  invisible(capture.output(sarima(x, p, d, q, P, D, Q, S, details = TRUE)))
+}
 
-### Data Processing
+# Training-set accuracy of a fitted model against the four benchmark methods.
+bench <- function(fit, x, h, label, unit) {
+  a <- rbind(accuracy(forecast(fit, h))[1, ], accuracy(meanf(x, h))[1, ], accuracy(naive(x, h))[1, ],
+             accuracy(snaive(x, h))[1, ], accuracy(rwf(x, drift = TRUE, h))[1, ])
+  a <- data.frame(Method = c(label, "Mean", "Naive", "Seasonal naive", "Drift"), round(a, 4), check.names = FALSE)
+  cat("\n\n"); print(kable(a, row.names = FALSE)); cat("\n\n")
+  autoplot(x) +
+    autolayer(meanf(x, h), series = "Mean", PI = FALSE) +
+    autolayer(naive(x, h), series = "Naive", PI = FALSE) +
+    autolayer(snaive(x, h), series = "Seasonal naive", PI = FALSE) +
+    autolayer(rwf(x, h, drift = TRUE), series = "Drift", PI = FALSE) +
+    autolayer(forecast(fit, h), series = label, PI = FALSE) +
+    guides(colour = guide_legend(title = "Method")) + ggtitle("Benchmark Forecasts") + xlab("Year") + ylab(unit)
+}
 
-```{r}
-df <- read_excel('data/data/GDP.xlsx')
-df <- na.omit(df)
-df$Date <- as.Date(df[[1]])
-df$Yield <- as.numeric(df[[2]])
-ts = ts(df$Yield, start=decimal_date(as.Date("1947-01-01")), frequency = 4)
-autoplot(ts) + ggtitle("GDP Over Time") + xlab("Year") + ylab("GDP in billion") + 
-    theme(
-    panel.background = element_blank())
-```
-
-<br>
-
-### Stationarity Check
-
-Initial assessments via `ACF` and `Augmented Dickey-Fuller` tests indicated that `GDP` required differencing due to non-stationarity. After converting to a time series and applying logarithmic transformation, first differencing was insufficient in detrending, but second differencing indicated stationarity.
-
-```{r}
-ggAcf(log(ts),40) + ggtitle("ACF Plot") + 
-    theme(
-    panel.background = element_blank())
-
-adf_test <- adf.test(ts)
-cat("Augmented Dickey-Fuller Test Results:\n")
-cat("Test Statistic:", adf_test$statistic, " ","P-value:", adf_test$p.value)
-if (adf_test$p.value < 0.05) {
-  cat("The time series is stationary based on the ADF test.\n")
-} else {
-  cat("The time series is not stationary based on the ADF test.\n")}
-cat("\n********************************************************************************************\n")
-ts <- log(ts)
-ts_diff <- ts %>% diff()
-ts_diff2 <- ts %>% diff() %>% diff()
-ggAcf(ts_diff,40) + ggtitle("ACF Plot After Differencing") + theme(panel.background = element_blank())
-ggPacf(ts_diff,40) + ggtitle("PACF Plot After Differencing") + theme(panel.background = element_blank())
-ggAcf(ts_diff2,40) + ggtitle("ACF Plot After Second Differencing") + theme(panel.background = element_blank())
-ggPacf(ts_diff2,40) + ggtitle("PACF Plot After Second Differencing") + theme(panel.background = element_blank())
-```
-
-<br>
-
-### Model Fitting
-
-After second differencing `GDP`, ACF shows one significant lag, while PACF shows five. This suggests ARIMA parameters `p = [1,2,3,4,5]`, `d = [1,2]`, `q = [1]`. I'll test these for the lowest `AIC`, `BIC`, and `AICc`, and cross-check with `auto.arima` to forecasting.
-
-```{r}
-i=1
-
-temp= data.frame()
-ls=matrix(rep(NA,6*10),nrow=10)
-
-
-for (p in 1:5)
-{
-  for(q in 1)
-  {
-    for(d in 1:2)
-    {
-      
-      if(p+d+q<=8)
-      {
-        model<- Arima(ts,order=c(p,d,q),include.drift=TRUE)
-        ls[i,]= c(p,d,q,model$aic,model$bic,model$aicc)
-        i=i+1
-
-      }
-      
+# Rolling-origin cross-validation. The first `frac` of the sample is the initial
+# training set; each later quarter is forecast 1 to `H` steps ahead from all data
+# before it, and the model is re-estimated at every origin.
+cv_compare <- function(x, specs, frac = 0.4, H = 4) {
+  n <- length(x); split <- floor(n * frac); tsz <- n - split; st <- tsp(x)[1] + (split - 1) / frequency(x)
+  one <- matrix(NA, tsz, length(specs)); multi <- lapply(specs, function(s) matrix(NA, tsz, H))
+  for (i in 1:tsz) {
+    xtr  <- window(x, end = st + (i - 1) / frequency(x))
+    xte1 <- x[split + i]
+    xteH <- suppressWarnings(window(x, start = st + i / frequency(x), end = st + (i + H - 1) / frequency(x)))
+    for (j in seq_along(specs)) {
+      s <- specs[[j]]
+      f <- tryCatch(Arima(xtr, order = s$order, seasonal = list(order = s$seasonal, period = frequency(x)),
+                          include.mean = s$mean, method = "ML"), error = function(e) NULL)
+      if (is.null(f)) next
+      fc <- forecast(f, h = H)$mean
+      one[i, j] <- abs(fc[1] - xte1)
+      if (length(xteH) == H) multi[[j]][i, ] <- abs(fc - xteH)
     }
   }
+  nm <- sapply(specs, `[[`, "name")
+  tab1 <- data.frame(Model = nm, MAE = round(colMeans(one, na.rm = TRUE), 4),
+                     MSE = round(colMeans(one^2, na.rm = TRUE), 4), check.names = FALSE)
+  tabH <- data.frame(Model = nm, t(sapply(multi, function(m) round(colMeans(m, na.rm = TRUE), 4))), check.names = FALSE)
+  names(tabH)[-1] <- paste0("h = ", 1:H)
+  cat(sprintf("\n\nInitial training set: %d quarters. One-step forecasts: %d. Four-step windows: %d.\n\n",
+              split, sum(!is.na(one[, 1])), sum(!is.na(multi[[1]][, 1]))))
+  print(kable(tab1, row.names = FALSE, caption = "One-Step-Ahead Errors")); cat("\n\n")
+  print(kable(tabH, row.names = FALSE, caption = "Mean Absolute Error by Horizon")); cat("\n\n")
+  long <- do.call(rbind, lapply(seq_along(specs), function(j)
+    data.frame(Model = nm[j], h = 1:H, MAE = colMeans(multi[[j]], na.rm = TRUE))))
+  ggplot(long, aes(h, MAE, colour = Model)) + geom_line() + geom_point() +
+    scale_x_continuous(breaks = 1:H) + xlab("Forecast horizon (quarters)") + ylab("Mean absolute error")
 }
 
-temp= as.data.frame(ls)
-names(temp)= c("p","d","q","AIC","BIC","AICc")
-aic_row <- paste("Model fitting with minimum AIC:\n", toString(temp[which.min(temp$AIC),]))
-aicc_row <- paste("\nModel fitting with minimum AICc:\n", toString(temp[which.min(temp$AICc),]))
-bic_row <- paste("\nModel fitting with minimum BIC:\n", toString(temp[which.min(temp$BIC),]))
-all_rows <- paste(aic_row, aicc_row, bic_row, sep="\n")
-cat(all_rows)
-```
-
-**auto.arima**
-
-```{r}
-auto.arima(ts)
-```
-
-<br>
-
-### Model Diagnostics
-
-The first ARIMA model `(1,1,1)` shows a good fit with the lowest information criteria scores, indicating effective parameter use. The residuals suggest the model captures the data's underlying process well. The second model, which appears to be a SARIMA given the seasonal components, is more complex and doesn't offer a significantly better fit, as the information criteria scores are marginally higher and some coefficients are not statistically significant. The first model is preferable for its simplicity and performance.
-
-```{r}
-model_output1 <- capture.output(sarima((ts),1,1,1))
-model_output1[32:61]
-```
-
-
-```{r}
-model_output2 <- capture.output(sarima((ts),0,2,3,1,0,1,4))
-model_output2[38:69]
-```
-
-<br>
-
-Equation for `ARIMA(1,1,1)`:
-
-$$(1 - \phi B)(1 - B)X_t = (1 + \theta B)W_t$$
-
-```{r}
-fit <- Arima(ts, order=c(1,1,1))
-summary(fit)
-```
-
-<br>
-
-### Forecasting
-
-The forecast shows a projected increase in the log-transformed GDP, with historical data indicating a good model fit. The widening confidence intervals suggest greater uncertainty in the longer term. While useful for economic planning, these predictions rely on past trends continuing unchanged and may not account for unforeseen economic events.
-
-```{r}
-ts %>%
-  Arima(order=c(1,1,1),include.drift = TRUE) %>%
-  forecast(h=60) %>%
-  autoplot() +
-  ylab("Prediction") + xlab("Year") + ggtitle("log(GDP) Prediction") + theme(panel.background = element_blank())
-```
-
-<br>
-
-### Benchmark Method
-
-The ARIMA model seems to closely follow the actual trend, along with the Drift model. The other models---Mean, Naive, and Seasonal Naive---diverge from the actual trend as time progresses, indicating less accuracy.
-
-From the accuracy metrics given, the ARIMA model outperforms the others with the lowest errors across multiple measures (RMSE, MAE, MPE, MAPE, MASE, and ACF1). The Mean Model performs the worst, with the highest errors. The Naive and Seasonal Naive models also show higher errors than ARIMA but are better than the Mean Model. The Random Walk with Drift Model has metrics comparable to the ARIMA model, suggesting it is also a good fit for the data. Overall, the ARIMA and Drift models are indicated as the best for this dataset based on the provided metrics.
-
-```{r}
-cat("ARIMA Model Accuracy Metrics:\n")
-pred <- forecast(fit, 60)
-acc_pred <- accuracy(pred)
-print(acc_pred)
-
-cat("\nMean Model Accuracy Metrics:\n")
-f1 <- meanf(ts, h=60)
-acc_f1 <- accuracy(f1)
-print(acc_f1)
-
-cat("\nNaive Model Accuracy Metrics:\n")
-f2 <- naive(ts, h=60)
-acc_f2 <- accuracy(f2)
-print(acc_f2)
-
-cat("\nSeasonal Naive Model Accuracy Metrics:\n")
-f3 <- snaive(ts, h=60)
-acc_f3 <- accuracy(f3)
-print(acc_f3)
-
-cat("\nRandom Walk with Drift Model Accuracy Metrics:\n")
-f4 <- rwf(ts, drift=TRUE, h=60)
-acc_f4 <- accuracy(f4)
-print(acc_f4)
-
-all_acc <- data.frame(
-  ARIMA = acc_pred[1, ],
-  Mean = acc_f1[1, ],
-  Naive = acc_f2[1, ],
-  SeasonalNaive = acc_f3[1, ],
-  Drift = acc_f4[1, ]
-)
-
-all_acc <- t(all_acc)
-lowest_scores <- apply(all_acc, 2, function(x) {
-  names(which.min(x))
-})
-cat("\nModel with the best Accuracy Metrics:\n",lowest_scores)
-
-autoplot(ts) +
-  autolayer(meanf(ts, h=60),
-            series="Mean", PI=FALSE) +
-  autolayer(naive(ts, h=60),
-            series="Naïve", PI=FALSE) +
-  autolayer(snaive(ts, h=60),
-            series="SNaïve", PI=FALSE)+
-  autolayer(rwf(ts, h=60, drift=TRUE),
-            series="Drift", PI=FALSE)+
-  autolayer(forecast(fit,60), 
-            series="ARIMA",PI=FALSE) +
-  guides(colour=guide_legend(title="Forecast")) +
-  ylab("Prediction") + xlab("Year") + ggtitle("Benchmark Evaluation") + theme(panel.background = element_blank())
-```
-
-## SARIMA - 3 Month Treasury Bill
-
-`SARIMA` models are used for treasury yields like 3-month T-bills or 20-year T-bonds because they help predict the regular ups and downs that happen throughout the year. These ups and downs can be due to when the government borrows more, changes in how often people invest, and rules that banks follow at certain times. SARIMA can catch these patterns, making it easier to guess where yields will go next, which is very important for people who invest in these securities.
-
-### Data Processing
-
-```{r}
-df <- read_excel('data/data/3-mon-t-bill-rate.xlsx')
-df <- na.omit(df)
-df$Date <- as.Date(df[[1]])
-df$Yield <- as.numeric(df[[2]])
-
-df$Quarter <- floor_date(df$Date, "quarter")
-df1 <- df %>%
-  group_by(Quarter) %>%
-  summarize(AverageYield = mean(Yield))
-df1$Quarter <- format(df1$Quarter)
-
-
-ts <- ts(df1$AverageYield, start=c(1982, 1), frequency=4)
-autoplot(ts) +
-  ggtitle("3 Month Treasury Yield Over Time - Quarterly Data") +
-  xlab("Year") +
-  ylab("Quarterly Yield") +
-  theme(panel.background = element_blank())
-```
-
-<br>
-
-### Stationarity Check
-
-Initial assessments via `ACF` and `Augmented Dickey-Fuller` tests indicated that `3Mon T-Bill Yield` required differencing due to non-stationarity. After converting to a time series, first differencing and seasonal differencing alone were insufficient in detrending, but the combination of non-seasonal and seaonal differencing indicated strong stationarity.
-
-```{r}
-ggAcf(ts,40) + ggtitle("ACF Plot") + 
-    theme(
-    panel.background = element_blank())
-
-plot(decompose(ts))
-
-adf_test <- adf.test(ts)
-cat("Augmented Dickey-Fuller Test Results:\n")
-cat("Test Statistic:", adf_test$statistic, " ","P-value:", adf_test$p.value)
-if (adf_test$p.value < 0.05) {
-  cat("The time series is stationary based on the ADF test.\n")
-} else {
-  cat("The time series is not stationary based on the ADF test.\n")}
-cat("\n********************************************************************************************\n")
-
-ts_diff <- ts %>% diff()
-ggAcf(ts_diff,40) + ggtitle("ACF Plot After Differencing") + theme(panel.background = element_blank())
-ggPacf(ts_diff,40) + ggtitle("PACF Plot After Differencing") + theme(panel.background = element_blank())
-
-ts_sdiff <- ts %>% diff(lag=4)
-ggAcf(ts_sdiff,40) + ggtitle("ACF Plot After Seasonal Differencing") + theme(panel.background = element_blank())
-ggPacf(ts_sdiff,40) + ggtitle("PACF Plot After Seasonal Differencing") + theme(panel.background = element_blank())
-
-ts_diff2 <- ts %>% diff() %>% diff(lag=4)
-ggAcf(ts_diff2,40) + ggtitle("ACF Plot After Second Differencing") + theme(panel.background = element_blank())
-ggPacf(ts_diff2,40) + ggtitle("PACF Plot After Second Differencing") + theme(panel.background = element_blank())
-```
-
-<br>
-
-### Model Fitting
-
-After second differencing `3 Month T-Bill Yield`, ACF shows three lags, while PACF shows four. This suggests ARIMA parameters `p = [0,1,2,3]`, `P = [2]`, `d = [1]`, `[D = 1]`, `q = [0,1,2], Q = [1]`. I'll test these for the lowest `AIC`, `BIC`, and `AICc`, and cross-check with `auto.arima` to forecasting.
-
-```{r}
-SARIMA.c=function(p1,p2,q1,q2,P1,P2,Q1,Q2,data){
-  
-  d=1
-  D=1
-  s=12
-  i=1
-  temp= data.frame()
-  ls=matrix(rep(NA,9*35),nrow=35)
-
-  for (p in p1:p2)
-  {
-    for(q in q1:q2)
-    {
-      for(P in P1:P2)
-      {
-        for(Q in Q1:Q2)
-        {
-          if(p+d+q+P+D+Q<=9)
-          {
-            model<- Arima(data,order=c(p,d,q),seasonal=c(P,D,Q))
-            ls[i,]= c(p,d,q,P,D,Q,model$aic,model$bic,model$aicc)
-            i=i+1
-          }
-        }
-      }
-    }
-  }
-  temp= as.data.frame(ls)
-  names(temp)= c("p","d","q","P","D","Q","AIC","BIC","AICc")
-  temp
-}
-
-output=SARIMA.c(p1=0,p2=3,q1=0,q2=3,P1=2,P2=2,Q1=1,Q2=1,data=ts)
-
-min_aic_info <- paste("Minimum AIC:", toString(output[which.min(output$AIC), ]))
-min_bic_info <- paste("Minimum BIC:", toString(output[which.min(output$BIC), ]))
-min_aicc_info <- paste("Minimum AICc:", toString(output[which.min(output$AICc), ]))
-
-cat(min_aic_info, "\n")
-cat(min_bic_info, "\n")
-cat(min_aicc_info, "\n")
-```
-
-**auto.arima**
-
-```{r}
-auto.arima(ts)
-```
-
-<br>
-
-### Model Diagnostics
-
-In the model fitting analysis, two prominent models emerged: `SARIMA(3,1,0)(2,0,0)[4]` and `SARIMA(1,1,1)(2,1,1)[4]`. The diagnostic comparison for these models focuses on evaluating key summary statistics, including the presence of a white noise pattern in the residuals, p-values, and critical model selection criteria like AIC, AICc, and BIC.
-
-```{r}
-model_output1 <- capture.output(sarima((ts),1, 1, 1, 2, 1, 1, 4))
-model_output1[67:97]
-```
-
-```{r}
-model_output2 <- capture.output(sarima((ts),3, 1, 0, 2, 0, 0, 4))
-model_output2[25:56]
-```
-
-<br>
-
-Equation for `SARIMA(1,1,1)(2,1,1)[4]`:
-
-$$(1 - \phi B)(1 - B)(1 - \Phi_1 B^s)(1 - \Phi_2 B^{2s})(1 - B^s)X_t = (1 + \theta B)(1 + \Theta_1 B^s)W_t$$
-
-```{r}
-fit <- Arima(ts,order=c(1,1,1), seasonal=c(2,1,1))
-summary(fit)
-```
-
-<br>
-
-### Forecasting
-
-The forecasting plot displays the historical and forecasted values for the 3 Month Treasury Yield over time, segmented into quarterly intervals. The historical data is traced with a solid black line that spans from 1980 up until around 2020. The forecasted data begins near 2020, transitioning into a dotted line. Accompanying the forecasted values is a blue shaded area that represents the confidence intervals, suggesting a range of possible values within which the true yield might fall. This area increases in size as the forecast extends further into the future, reflecting growing uncertainty in the model's predictions over time.
-
-```{r}
-fit %>%
-  forecast(h=12) %>%
-  autoplot() +
-  ylab("Prediction") + xlab("Year") + ggtitle("3 Month Treasury Yield Over Time - Quarterly Data Prediction") + theme(panel.background = element_blank())
-```
-
-<br>
-
-### Benchmark Method
-
-The benchmark plot compares several forecasting models, showing the SARIMA model outperforms others with the lowest error metrics, suggesting it's the most accurate for predicting the given time series from 1980 to the near present.
-
-```{r}
-cat("SARIMA Model Accuracy Metrics:\n")
-pred <- forecast(fit, 12)
-acc_pred <- accuracy(pred)
-print(acc_pred)
-
-cat("\nMean Model Accuracy Metrics:\n")
-f1 <- meanf(ts, h=12)
-acc_f1 <- accuracy(f1)
-print(acc_f1)
-
-cat("\nNaive Model Accuracy Metrics:\n")
-f2 <- naive(ts, h=12)
-acc_f2 <- accuracy(f2)
-print(acc_f2)
-
-cat("\nSeasonal Naive Model Accuracy Metrics:\n")
-f3 <- snaive(ts, h=12)
-acc_f3 <- accuracy(f3)
-print(acc_f3)
-
-cat("\nRandom Walk with Drift Model Accuracy Metrics:\n")
-f4 <- rwf(ts, drift=TRUE, h=12)
-acc_f4 <- accuracy(f4)
-print(acc_f4)
-
-all_acc <- data.frame(
-  SARIMA = acc_pred[1, ],
-  Mean = acc_f1[1, ],
-  Naive = acc_f2[1, ],
-  SeasonalNaive = acc_f3[1, ],
-  Drift = acc_f4[1, ]
-)
-
-all_acc <- t(all_acc)
-lowest_scores <- apply(all_acc, 2, function(x) {
-  names(which.min(x))
-})
-cat("\nModel with the best Accuracy Metrics:\n",lowest_scores)
-
-autoplot(ts) +
-  autolayer(meanf(ts, h=12),
-            series="Mean", PI=FALSE) +
-  autolayer(naive(ts, h=12),
-            series="Naïve", PI=FALSE) +
-  autolayer(snaive(ts, h=12),
-            series="SNaïve", PI=FALSE)+
-  autolayer(rwf(ts, h=12, drift=TRUE),
-            series="Drift", PI=FALSE)+
-  autolayer(forecast(fit,12), 
-            series="SARIMA",PI=FALSE) +
-  guides(colour=guide_legend(title="Forecast")) +
-  ylab("Prediction") + xlab("Year") + ggtitle("Benchmark Evaluation") + theme(panel.background = element_blank())
-```
-
-<br>
-
-### Cross Validation
-
-The graph shows a multi-step forecast horizon where two models are compared based on their Mean Absolute Error. Across all forecast horizons, `Model 2` consistently reports a lower MAE, suggesting it has a more accurate forecast performance than `Model 1`. This is reinforced by one-step ahead cross-validation results where `Model 2` also has a lower MAE and MSE, confirming its superior predictive accuracy.
-
-```{r}
-split_index <- floor(length(ts) * 0.4)
-train_size <- split_index
-test_size <- length(ts) - split_index
-errors <- data.frame(err1=rep(NA, test_size), err2=rep(NA, test_size), err3=rep(NA, test_size), err4=rep(NA, test_size))
-
-for(i in 1:test_size) {
-  xtrain <- ts[1:(train_size+i-1)]
-  xtest <- ts[train_size+i]
-  
-  fit1 <- Arima(xtrain, order=c(1,1,1), seasonal=list(order=c(2,1,1), period=4), include.drift=FALSE, method="ML")
-  fcast1 <- forecast(fit1, h=1) 
-  
-  fit2 <- Arima(xtrain, order=c(3,1,0), seasonal=list(order=c(2,0,0), period=4), include.drift=FALSE, method="ML")
-  fcast2 <- forecast(fit2, h=1) 
-  
-  errors$err1[i] <- abs(fcast1$mean - xtest) 
-  errors$err2[i] <- abs(fcast2$mean - xtest) 
-  errors$err3[i] <- (fcast1$mean - xtest)^2 
-  errors$err4[i] <- (fcast2$mean - xtest)^2 
-}
-
-MAE1 <- mean(errors$err1, na.rm = TRUE)
-MAE2 <- mean(errors$err2, na.rm = TRUE)
-MSE1 <- mean(errors$err3, na.rm = TRUE)
-MSE2 <- mean(errors$err4, na.rm = TRUE)
-
-cat("One-Step Ahead Cross Validation:\n")
-cat("Model 1 - MAE:", MAE1, "MSE:", MSE1, "\n")
-cat("Model 2 - MAE:", MAE2, "MSE:", MSE2, "\n")
-
-if (MAE1 < MAE2 && MSE1 < MSE2) {
-  cat("Model 1 performs better on both MAE and MSE.\n")
-} else if (MAE1 < MAE2) {
-  cat("Model 1 has a lower MAE but not necessarily a lower MSE.\n")
-} else if (MSE1 < MSE2) {
-  cat("Model 1 has a lower MSE but not necessarily a lower MAE.\n")
-} else {
-  cat("Model 2 performs better on both MAE and MSE.\n")
+adf_line <- function(x, label) {
+  a <- suppressWarnings(adf.test(x))
+  cat(sprintf("%-32s ADF statistic %6.2f   p-value %s\n", label, a$statistic,
+              ifelse(a$p.value <= 0.01, "< 0.01", ifelse(a$p.value >= 0.99, "> 0.99", sprintf("%.3f", a$p.value)))))
 }
 ```
 
+***
+### Purpose
+
+This section fits univariate models to four series: the Consumer Price Index, real GDP, and the quarterly averages of the 3-month and 6-month Treasury bill spreads over the Federal Funds Rate. Each series follows the same sequence. The order of differencing is set from the augmented Dickey-Fuller test and the autocorrelation function, the autoregressive and moving-average orders are identified from the ACF and PACF of the stationary series, a grid of candidate orders is estimated and ranked by AIC, AICc and BIC, and the ranking is compared with the selection made by `auto.arima` [@hyndman2008]. The retained model is then checked for coefficient significance and residual autocorrelation, used to forecast, compared with four benchmark methods, and, for the two spreads, tested by rolling-origin cross-validation.
+
+Two points apply throughout. Information criteria are comparable only among models fitted to the same differenced series, so a model with d = 1 cannot be ranked against one with d = 2 by AIC; where the two appear together the comparison is made on diagnostics and out-of-sample error instead. The benchmark tables report training-set errors, which measure fit, not forecast accuracy; the cross-validation tables measure forecast accuracy.
+
+## Consumer Price Index
+
+### Data
+
+The series is `CPIAUCSL`, monthly and seasonally adjusted, from January 1947 to August 2023, 920 observations. It is modelled in logarithms so that differences are approximately percentage changes and the variance does not grow with the level.
+
 ```{r}
-cat("Multi Step Cross Validation:\n")
-n <- length(ts)
-forecast_horizon <- 4
-split_index <- floor(n * 0.4)
-train_size <- split_index
-test_size <- n - split_index
+df <- na.omit(read_excel("data/data/cpi-u.xlsx"))
+cpi <- ts(as.numeric(df[[2]]), start = c(1947, 1), frequency = 12)
+lcpi <- log(cpi)
+autoplot(cpi) + ggtitle("CPI") + xlab("Year") + ylab("Index, 1982-84 = 100")
+```
 
-mae1 <- matrix(NA, test_size, forecast_horizon)
-mae2 <- matrix(NA, test_size, forecast_horizon)
-st <- tsp(ts)[1] + (train_size - 1) / frequency(ts)
+### Stationarity
 
-for(i in 1:test_size) {
-  xtrain <- window(ts, end=st + (i-1)/frequency(ts))
-  xtest <- window(ts, start=st + i/frequency(ts), end=st + (i+forecast_horizon-1)/frequency(ts))
+```{r}
+adf_line(cpi, "Level"); adf_line(lcpi, "Log level")
+adf_line(diff(lcpi), "First difference of log"); adf_line(diff(lcpi, differences = 2), "Second difference of log")
+```
 
-  if (length(xtest) < forecast_horizon) {
-    next 
-  }
-  
-  fit1 <- Arima(xtrain, order=c(1,1,1), seasonal=list(order=c(2,1,1), period=frequency(ts)),
-                include.drift=FALSE, method="ML")
-  fcast1 <- forecast(fit1, h=forecast_horizon)
-  
-  fit2 <- Arima(xtrain, order=c(3,1,0), seasonal=list(order=c(2,0,0), period=frequency(ts)),
-                include.drift=FALSE, method="ML")
-  fcast2 <- forecast(fit2, h=forecast_horizon)
-  
-  mae1[i, ] <- abs(fcast1$mean - xtest)
-  mae2[i, ] <- abs(fcast2$mean - xtest)
+The level and the log level do not reject the unit root. The first difference of the log, which is monthly inflation, rejects it with a statistic of −4.30, but its ACF is significant at every one of the first 40 lags, with a lag-one value of 0.58 and a slow decline, and its PACF is significant through lag 7. Inflation is stationary by the test but so persistent that an ARMA model in first differences would need a high order to absorb the autocorrelation. The second difference has an ACF that cuts off after lag 2 (−0.31 and −0.16), apart from a cluster of small significant values at lags 10 to 12, and a PACF that tails off through lag 9. That pattern identifies a moving-average process of order 2. The model is therefore fitted with d = 2, which is also the order `auto.arima` selects.
+
+```{r fig.width=9, fig.height=3}
+gridExtra::grid.arrange(
+  ggAcf(lcpi, 40) + ggtitle("ACF, Log Level"),
+  ggAcf(diff(lcpi), 40) + ggtitle("ACF, First Difference"),
+  ggPacf(diff(lcpi), 40) + ggtitle("PACF, First Difference"), nrow = 1)
+gridExtra::grid.arrange(
+  ggAcf(diff(lcpi, differences = 2), 40) + ggtitle("ACF, Second Difference"),
+  ggPacf(diff(lcpi, differences = 2), 40) + ggtitle("PACF, Second Difference"), nrow = 1)
+```
+
+### Model Selection
+
+The grid covers p from 0 to 3 and q from 0 to 2 with d = 2, twelve models, all without a constant since a constant with d = 2 would impose a quadratic trend.
+
+```{r}
+grid <- expand.grid(p = 0:3, d = 2, q = 0:2)
+grid <- cbind(grid, t(apply(grid, 1, function(o) { m <- Arima(lcpi, order = o); c(AIC = m$aic, AICc = m$aicc, BIC = m$bic) })))
+grid <- grid[order(grid$AICc), ]; grid[, 4:6] <- round(grid[, 4:6], 2)
+kable(head(grid, 6), row.names = FALSE, caption = "Six Lowest-AICc Models")
+cat("auto.arima selection:\n"); auto.arima(lcpi)
+```
+
+AIC and AICc select `ARIMA(3,2,2)`, at −8246.3; BIC selects `ARIMA(0,2,2)`, at −8242.2 against −8217.4 for the larger model. The difference in AIC between the two is 4.1 points for three additional parameters. `auto.arima`, which also searches seasonal terms, selects `SARIMA(1,2,1)(2,0,0)[12]` with an AIC of −8288.7, lower than either. The seasonal autoregressive terms respond to the autocorrelation at lags 10 to 12 noted above, which remains in the series even though it is published seasonally adjusted.
+
+### Diagnostics
+
+```{r fig.width=9, fig.height=6}
+diag_plot(lcpi, 3, 2, 2); report(Arima(lcpi, order = c(3, 2, 2)))
+```
+
+```{r fig.width=9, fig.height=6}
+diag_plot(lcpi, 0, 2, 2); report(Arima(lcpi, order = c(0, 2, 2)))
+```
+
+```{r fig.width=9, fig.height=6}
+diag_plot(lcpi, 1, 2, 1, 2, 0, 0, 12); report(Arima(lcpi, order = c(1, 2, 1), seasonal = c(2, 0, 0)))
+```
+
+All coefficients in all three models are significant at the 5% level; the weakest is the third autoregressive term of `ARIMA(3,2,2)`, with p = 0.047. The residual autocorrelation tells a consistent story. At lag 8 the Ljung-Box test does not reject white noise for any model. At lags 12 and 20 it rejects for both non-seasonal models, with p-values below 0.001, because of the autocorrelation at lags 10 to 12 that neither model addresses. The seasonal model reduces the problem, with p-values of 0.033 at lag 12 and 0.014 at lag 20, but does not remove it.
+
+`ARIMA(0,2,2)` is retained for forecasting. It is the BIC choice, it has two parameters against four or five, and its short-lag residuals are clean. The remaining autocorrelation at lags 10 to 12 is small in magnitude and affects the forecast intervals more than the point forecast. The model is
+
+$$(1 - B)^2 \log X_t = (1 + \theta_1 B + \theta_2 B^2)\, w_t, \qquad \hat\theta_1 = -0.56,\ \hat\theta_2 = -0.25,$$
+
+which is equivalent to Holt's linear-trend method: the forecast extends the level and slope estimated at the end of the sample.
+
+### Forecast
+
+```{r}
+fit_cpi <- Arima(lcpi, order = c(0, 2, 2))
+fc <- forecast(fit_cpi, h = 60)
+autoplot(fc) + ggtitle("Log CPI, 60-Month Forecast") + xlab("Year") + ylab("Log index")
+```
+
+The forecast runs 60 months, from September 2023 to August 2028. The point forecast takes the index from 306.3 to 380.8, an average of 4.4% a year, above the 3.7% recorded over the twelve months to August 2023 because the slope is estimated from the 2021–2023 period. The 80% interval at the end of the horizon runs from 311 to 466 and the 95% interval from 280 to 518, in index points.
+
+### Benchmarks
+
+```{r fig.width=9, fig.height=4}
+#| results: asis
+bench(fit_cpi, lcpi, 60, "ARIMA(0,2,2)", "Log index")
+```
+
+The errors are in log units on the training set. `ARIMA(0,2,2)` has the lowest RMSE, 0.0027, followed by the drift method at 0.0034, the naive method at 0.0045, the seasonal naive at 0.044 and the mean at 0.86. The ordering is the same on MAE, MAPE and MASE. The mean method has the smallest mean percentage error only because that measure is signed and its errors cancel.
+
+## Real GDP
+
+### Data
+
+The series is `GDPC1`, quarterly, seasonally adjusted, from the first quarter of 1947 to the second quarter of 2023, 306 observations. It is modelled in logarithms.
+
+```{r}
+df <- na.omit(read_excel("data/data/GDP.xlsx"))
+gdp <- ts(as.numeric(df[[2]]), start = c(1947, 1), frequency = 4)
+lgdp <- log(gdp)
+autoplot(gdp) + ggtitle("Real GDP") + xlab("Year") + ylab("$ billions")
+```
+
+### Stationarity
+
+```{r}
+adf_line(gdp, "Level"); adf_line(lgdp, "Log level")
+adf_line(diff(lgdp), "First difference of log"); adf_line(diff(lgdp, differences = 2), "Second difference of log")
+```
+
+The first difference of log GDP, which is quarterly real growth, rejects the unit root with a statistic of −7.36. Its ACF is significant at lags 1 and 2 only, with a lag-one value of 0.13, and its PACF at lag 1 only. The mean of the differenced series is 0.0076 per quarter, 3.1% a year, so the model needs a drift term. A second difference is not required: its ACF has a lag-one value of −0.49, the signature of a series that has been differenced once too often. The models are fitted with d = 1 and drift.
+
+```{r fig.width=9, fig.height=3}
+gridExtra::grid.arrange(
+  ggAcf(lgdp, 40) + ggtitle("ACF, Log Level"),
+  ggAcf(diff(lgdp), 40) + ggtitle("ACF, First Difference"),
+  ggPacf(diff(lgdp), 40) + ggtitle("PACF, First Difference"), nrow = 1)
+```
+
+### Model Selection
+
+The grid covers p from 1 to 5 and q from 0 to 1 with d = 1 and d = 2, twenty models. `Arima` drops the drift term when d = 2, so those ten models have no constant.
+
+```{r}
+grid <- expand.grid(p = 1:5, d = 1:2, q = 0:1)
+grid <- cbind(grid, t(apply(grid, 1, function(o) { m <- suppressWarnings(Arima(lgdp, order = o, include.drift = TRUE)); c(AIC = m$aic, AICc = m$aicc, BIC = m$bic) })))
+grid <- grid[order(grid$AICc), ]; grid[, 4:6] <- round(grid[, 4:6], 2)
+kable(head(grid, 6), row.names = FALSE, caption = "Six Lowest-AICc Models")
+cat("auto.arima selection:\n"); auto.arima(lgdp)
+```
+
+Every model with d = 1 ranks above every model with d = 2. AIC and AICc select `ARIMA(2,1,0)` with drift, at −1873.4; BIC selects `ARIMA(1,1,0)` with drift, at −1861.3, and that model is within one AIC point of the first. `auto.arima` selects `SARIMA(0,2,3)(1,0,1)[4]`, with d = 2 and no drift; its AIC of −1859.6 is not comparable with the d = 1 models.
+
+### Diagnostics
+
+```{r fig.width=9, fig.height=6}
+diag_plot(lgdp, 1, 1, 0); report(Arima(lgdp, order = c(1, 1, 0), include.drift = TRUE))
+```
+
+```{r fig.width=9, fig.height=6}
+diag_plot(lgdp, 2, 1, 0); report(Arima(lgdp, order = c(2, 1, 0), include.drift = TRUE))
+```
+
+```{r fig.width=9, fig.height=6}
+diag_plot(lgdp, 0, 2, 3, 1, 0, 1, 4); report(Arima(lgdp, order = c(0, 2, 3), seasonal = c(1, 0, 1)))
+```
+
+In `ARIMA(1,1,0)` both terms are significant: the autoregressive coefficient is 0.13 with p = 0.019 and the drift is 0.0076 with p below 0.001. The Ljung-Box p-values are 0.61, 0.77 and 0.86 at lags 8, 12 and 20. `ARIMA(2,1,0)` adds a second lag with p = 0.089 and does not improve the residuals. In the `auto.arima` model, four of the five coefficients have p-values above 0.05 and the second moving-average term is zero to three decimals, making the model over-parameterised. `ARIMA(1,1,0)` with drift is retained:
+
+$$(1 - \phi B)(1 - B)\log X_t = c + w_t, \qquad \hat\phi = 0.13,\ \hat c = 0.0076.$$
+
+### Forecast
+
+```{r}
+fit_gdp <- Arima(lgdp, order = c(1, 1, 0), include.drift = TRUE)
+fc <- forecast(fit_gdp, h = 60)
+autoplot(fc) + ggtitle("Log Real GDP, 60-Quarter Forecast") + xlab("Year") + ylab("Log $ billions")
+```
+
+The horizon is 60 quarters, from the third quarter of 2023 to the second quarter of 2038. The point forecast grows at the drift rate, 3.1% a year, and reaches \$35,057 billion in 2038. The 80% interval at that date runs from \$30,855 to \$39,832 billion and the 95% interval from \$28,838 to \$42,618. A forecast fifteen years out from a univariate model describes the average growth rate of the sample, not the path of the economy.
+
+### Benchmarks
+
+```{r fig.width=9, fig.height=4}
+#| results: asis
+bench(fit_gdp, lgdp, 60, "ARIMA(1,1,0)", "Log $ billions")
+```
+
+`ARIMA(1,1,0)` and the drift method are nearly identical, with RMSE of 0.0111 and 0.0112 and MAE of 0.0069 and 0.0071. They are the same model apart from the autoregressive correction. The naive method has RMSE 0.0136, the seasonal naive 0.040 and the mean 0.69.
+
+## 3-Month Spread
+
+### Data
+
+The series is `T3MFF`, the 3-month Treasury bill yield minus the effective Federal Funds Rate, daily from January 1982. The daily values are averaged within each calendar quarter, giving 168 quarters from the first quarter of 1982 to the fourth quarter of 2023. The final quarter contains only two trading days, 2 and 3 October 2023, and its value of 0.29 is the average of those two days. The quarterly series ranges from −1.49 points in the second quarter of 1982 to 0.55 in the third quarter of 2022, with a mean of −0.20. The mean is not stable across the sample: it is −0.62 over 1982–1989 and −0.10 from 1990 onward.
+
+```{r}
+df <- na.omit(read_excel("data/data/3-mon-t-bill-rate.xlsx"))
+df$Date <- as.Date(df[[1]]); df$Value <- as.numeric(df[[2]]); df$Quarter <- floor_date(df$Date, "quarter")
+q <- df |> group_by(Quarter) |> summarize(Value = mean(Value), .groups = "drop")
+s3 <- ts(q$Value, start = c(1982, 1), frequency = 4)
+autoplot(s3) + ggtitle("3-Month Bill Minus Federal Funds Rate, Quarterly Average") + xlab("Year") + ylab("% points")
+```
+
+### Stationarity
+
+```{r}
+adf_line(s3, "Level"); adf_line(diff(s3), "First difference")
+k <- suppressWarnings(kpss.test(s3)); cat(sprintf("%-32s KPSS statistic %6.2f   p-value %s\n", "Level", k$statistic, ifelse(k$p.value <= 0.01, "< 0.01", sprintf("%.3f", k$p.value))))
+dc <- decompose(s3); cat(sprintf("Seasonal component range: %.3f to %.3f points. Series standard deviation: %.3f.\n", min(dc$figure), max(dc$figure), sd(s3)))
+```
+
+The evidence on the level is mixed at quarterly frequency. The ADF statistic is −3.32 with p = 0.070, a rejection at the 10% level but not at 5%; the KPSS test, whose null is stationarity, rejects with p below 0.01. On the daily data the ADF statistic is −8.28 and the unit root is rejected decisively (see the exploratory analysis). Averaging to quarters leaves 168 observations of a persistent series, and both tests have low power in that setting. The autocorrelation structure is unambiguous: the ACF declines geometrically, 0.82, 0.63, 0.47, 0.39, 0.35, and the PACF is significant at lag 1 only, at 0.82. That is the pattern of a stationary first-order autoregression, and a spread between two overnight-to-three-month rates is bounded by arbitrage, so it is modelled in levels.
+
+Seasonality is negligible. The seasonal component from a classical decomposition ranges from −0.03 to +0.04 points against a standard deviation of 0.33, about a tenth of the variation. No seasonal differencing is applied; seasonal AR and MA terms are included in the grid so that the data can select them if they help.
+
+```{r fig.width=9, fig.height=3}
+gridExtra::grid.arrange(
+  ggAcf(s3, 24) + ggtitle("ACF, Level"), ggPacf(s3, 24) + ggtitle("PACF, Level"),
+  ggAcf(diff(s3), 24) + ggtitle("ACF, First Difference"), nrow = 1)
+```
+
+### Model Selection
+
+The grid covers p and q from 0 to 3 and seasonal P and Q from 0 to 1, with d = D = 0 and a mean, 64 models.
+
+```{r}
+sgrid <- function(x) {
+  g <- expand.grid(p = 0:3, q = 0:3, P = 0:1, Q = 0:1)
+  ic <- t(apply(g, 1, function(o) { m <- tryCatch(Arima(x, order = c(o["p"], 0, o["q"]), seasonal = c(o["P"], 0, o["Q"])), error = function(e) NULL)
+    if (is.null(m)) c(AIC = NA, AICc = NA, BIC = NA) else c(AIC = m$aic, AICc = m$aicc, BIC = m$bic) }))
+  g <- cbind(g, round(ic, 2)); g[order(g$AICc), ]
 }
-
-plot(1:forecast_horizon, colMeans(mae1, na.rm=TRUE), type="l", col=2, xlab="Horizon", ylab="MAE", ylim=c(0, max(c(colMeans(mae1, na.rm=TRUE), colMeans(mae2, na.rm=TRUE)))))
-lines(1:forecast_horizon, colMeans(mae2, na.rm=TRUE), type="l", col=3)
-legend("topleft", legend=c("M1", "M2"), col=2:3, lty=1)
+g3 <- sgrid(s3)
+kable(head(g3, 6), row.names = FALSE, caption = "Six Lowest-AICc Models")
+kable(head(g3[order(g3$BIC), ], 3), row.names = FALSE, caption = "Three Lowest-BIC Models")
+cat("auto.arima with d = 0:\n"); auto.arima(s3, d = 0)
 ```
 
-## SARIMA - 6 Month Treasury Bill
+BIC selects `AR(1)`, at −79.5, with the next model, `AR(2)`, four points behind. AIC and AICc select `ARMA(0,3)(1,1)[4]` at −90.2 against −88.9 for `AR(1)`, a gain of 1.3 points for four additional parameters. `auto.arima` constrained to d = 0 selects `AR(1)(2,0,1)[4]`; left unconstrained it selects `SARIMA(3,1,0)(2,0,0)[4]`, differencing the series once, a choice the tests above do not support.
 
-### Data Processing
+### Diagnostics
+
+```{r fig.width=9, fig.height=6}
+diag_plot(s3, 1, 0, 0); report(Arima(s3, order = c(1, 0, 0)))
+```
+
+```{r fig.width=9, fig.height=6}
+diag_plot(s3, 1, 0, 0, 2, 0, 1, 4); report(Arima(s3, order = c(1, 0, 0), seasonal = c(2, 0, 1)))
+```
+
+The `AR(1)` coefficient is 0.844 with a standard error of 0.042, three and a half standard errors below one, and the mean is −0.204 with p = 0.019. The residual standard deviation is 0.183 points. The residuals have one autocorrelation outside the confidence band, −0.19 at lag 3, which puts the Ljung-Box p-values at lags 3 and 4 at 0.024 and 0.035; from lag 5 onward they exceed 0.05, reaching 0.14, 0.15 and 0.20 at lags 8, 12 and 20. Models that add a third lag, `AR(3)` and `ARMA(1,3)`, remove the lag-3 autocorrelation but their additional coefficients are not significant and both have higher AIC and BIC than `AR(1)`. The seasonal alternative has a seasonal AR coefficient of 0.79 and a seasonal MA coefficient of −0.86, which nearly cancel, and its Ljung-Box p-value at lag 8 is 0.026, worse than the simpler model. `AR(1)` is retained:
+
+$$X_t - \mu = \phi\,(X_{t-1} - \mu) + w_t, \qquad \hat\phi = 0.844,\ \hat\mu = -0.204.$$
+
+The half-life of a shock is $\log 0.5 / \log 0.844 = 4.1$ quarters. The residuals are not normal (the largest, 0.81 points, is in the second quarter of 1982), so the prediction intervals, which assume normality, understate the tails.
+
+### Forecast
 
 ```{r}
-df <- read_excel('data/data/6-mon-t-bill-rate.xlsx')
-df <- na.omit(df)
-df$Date <- as.Date(df[[1]])
-df$Yield <- as.numeric(df[[2]])
-
-df$Quarter <- floor_date(df$Date, "quarter")
-df1 <- df %>%
-  group_by(Quarter) %>%
-  summarize(AverageYield = mean(Yield))
-df1$Quarter <- format(df1$Quarter)
-
-
-ts <- ts(df1$AverageYield, start=c(1982, 1), frequency=4)
-autoplot(ts) +
-  ggtitle("6 Month Treasury Yield Over Time - Quarterly Data") +
-  xlab("Year") +
-  ylab("Quarterly Yield") +
-  theme(panel.background = element_blank())
+fit_s3 <- Arima(s3, order = c(1, 0, 0))
+fc <- forecast(fit_s3, h = 12)
+autoplot(fc) + ggtitle("3-Month Spread, 12-Quarter Forecast") + xlab("Year") + ylab("% points")
 ```
 
-<br>
+From the last value of 0.29 the point forecast falls to 0.21 in the first quarter of 2024, 0.05 by the fourth quarter of 2024 and −0.14 by the fourth quarter of 2026, converging on the sample mean. The 80% interval is −0.02 to 0.45 one quarter ahead and −0.57 to 0.29 twelve quarters ahead; the 95% interval at twelve quarters is −0.80 to 0.52. Given the shift in the mean after 1990, the convergence toward −0.20 rather than toward the post-1990 mean of −0.10 is a limitation of a constant-mean model.
 
-### Stationarity Check
+### Benchmarks
 
-The provided plots illustrate the stages of time series analysis, where the initial ACF plot suggests non-stationarity, confirmed by a significant Augmented Dickey-Fuller test result, indicating that differencing has led to a stationary series. The decomposition shows the time series' trend and seasonality, while subsequent ACF and PACF plots demonstrate effective stabilization of the series after differencing, readying it for ARIMA modeling.
+```{r fig.width=9, fig.height=4}
+#| results: asis
+bench(fit_s3, s3, 12, "AR(1)", "% points")
+```
+
+`AR(1)` has the lowest RMSE, 0.182, against 0.189 for the naive and drift methods, 0.328 for the seasonal naive and 0.332 for the mean. The percentage-error columns are not informative for this series because it crosses zero.
+
+### Cross-Validation
+
+The rolling-origin comparison includes the retained `AR(1)`, the seasonal alternative, and two models that difference the series, `SARIMA(1,1,1)(2,1,1)[4]` and the unconstrained `auto.arima` choice `SARIMA(3,1,0)(2,0,0)[4]`. The differenced models are included to test whether the decision not to difference costs forecast accuracy. The initial training set is the first 40% of the sample, 67 quarters to the third quarter of 1998, and each model is re-estimated at each of the 101 later quarters.
+
+```{r fig.width=7, fig.height=3.5}
+#| results: asis
+cv_compare(s3, list(
+  list(name = "AR(1)",                 order = c(1, 0, 0), seasonal = c(0, 0, 0), mean = TRUE),
+  list(name = "AR(1)(2,0,1)[4]",       order = c(1, 0, 0), seasonal = c(2, 0, 1), mean = TRUE),
+  list(name = "SARIMA(1,1,1)(2,1,1)[4]", order = c(1, 1, 1), seasonal = c(2, 1, 1), mean = FALSE),
+  list(name = "SARIMA(3,1,0)(2,0,0)[4]", order = c(3, 1, 0), seasonal = c(2, 0, 0), mean = FALSE)))
+```
+
+One step ahead the four models are close: mean squared errors of 0.0197, 0.0191, 0.0195 and 0.0226, and mean absolute errors of 0.102, 0.095, 0.090 and 0.097. At longer horizons the differenced `SARIMA(1,1,1)(2,1,1)[4]` has the lowest error, 0.156 at four quarters against 0.212 for `AR(1)`. The reason is the shift in the mean. The test period runs from late 1998, when the spread averaged −0.08, and includes 2009–2015, when it was within 0.1 of zero in 27 of 28 quarters; the `AR(1)`, estimated on data that begin in 1982, pulls every forecast toward a mean that lies between −0.4 and −0.2 depending on the origin, while a differenced model carries the current level forward. The differenced model is not retained, because its first-order MA coefficient is estimated at −1.00, which is the model undoing the differencing, and its residuals fail the Ljung-Box test at lag 8. The comparison does show that the `AR(1)`'s constant mean is its weakest assumption for this series.
+
+## 6-Month Spread
+
+### Data
+
+The series is `T6MFF`, the 6-month bill yield minus the effective Federal Funds Rate, averaged by calendar quarter over the same 168 quarters, with the same two-day final quarter. It ranges from −1.03 points in the first quarter of 2008 to 1.05 in the third quarter of 2022, with a mean of −0.03: −0.26 over 1982–1989 and 0.03 from 1990.
 
 ```{r}
-ggAcf(ts,40) + ggtitle("ACF Plot") + 
-    theme(
-    panel.background = element_blank())
-
-plot(decompose(ts))
-
-adf_test <- adf.test(ts)
-cat("Augmented Dickey-Fuller Test Results:\n")
-cat("Test Statistic:", adf_test$statistic, " ","P-value:", adf_test$p.value)
-if (adf_test$p.value < 0.05) {
-  cat("The time series is stationary based on the ADF test.\n")
-} else {
-  cat("The time series is not stationary based on the ADF test.\n")}
-cat("\n********************************************************************************************\n")
-ts_diff <- ts %>% diff()
-ggAcf(ts_diff,40) + ggtitle("ACF Plot After Differencing") + theme(panel.background = element_blank())
-ggPacf(ts_diff,40) + ggtitle("PACF Plot After Differencing") + theme(panel.background = element_blank())
-
-ts_sdiff <- ts %>% diff(lag=4)
-ggAcf(ts_sdiff,40) + ggtitle("ACF Plot After Seasonal Differencing") + theme(panel.background = element_blank())
-ggPacf(ts_sdiff,40) + ggtitle("PACF Plot After Seasonal Differencing") + theme(panel.background = element_blank())
-
-ts_diff2 <- ts %>% diff() %>% diff(lag=4)
-ggAcf(ts_diff2,40) + ggtitle("ACF Plot After Second Differencing") + theme(panel.background = element_blank())
-ggPacf(ts_diff2,40) + ggtitle("PACF Plot After Second Differencing") + theme(panel.background = element_blank())
+df <- na.omit(read_excel("data/data/6-mon-t-bill-rate.xlsx"))
+df$Date <- as.Date(df[[1]]); df$Value <- as.numeric(df[[2]]); df$Quarter <- floor_date(df$Date, "quarter")
+q <- df |> group_by(Quarter) |> summarize(Value = mean(Value), .groups = "drop")
+s6 <- ts(q$Value, start = c(1982, 1), frequency = 4)
+autoplot(s6) + ggtitle("6-Month Bill Minus Federal Funds Rate, Quarterly Average") + xlab("Year") + ylab("% points")
 ```
 
-<br>
-
-### Model Fitting
-
-After differencing `6 Month T-Bill Yield`, ACF and PACF show significance at multiple lags. This suggests ARIMA parameters `p = [0,1,2,3]`, `P = [2]`, `d = [1]`, `[D = 1]`, `q = [0,1,2,3], Q = [1]`. I'll test these for the lowest `AIC`, `BIC`, and `AICc`, and cross-check with `auto.arima` to forecasting.
+### Stationarity
 
 ```{r}
-SARIMA.c=function(p1,p2,q1,q2,P1,P2,Q1,Q2,data){
-  
-  d=1
-  D=1
-  s=12
-  i=1
-  temp= data.frame()
-  ls=matrix(rep(NA,9*35),nrow=35)
-
-  for (p in p1:p2)
-  {
-    for(q in q1:q2)
-    {
-      for(P in P1:P2)
-      {
-        for(Q in Q1:Q2)
-        {
-          if(p+d+q+P+D+Q<=9)
-          {
-            model<- Arima(data,order=c(p,d,q),seasonal=c(P,D,Q))
-            ls[i,]= c(p,d,q,P,D,Q,model$aic,model$bic,model$aicc)
-            i=i+1
-          }
-        }
-      }
-    }
-  }
-  temp= as.data.frame(ls)
-  names(temp)= c("p","d","q","P","D","Q","AIC","BIC","AICc")
-  temp
-}
-
-output=SARIMA.c(p1=0,p2=3,q1=0,q2=3,P1=2,P2=2,Q1=1,Q2=1,data=ts)
-
-min_aic_info <- paste("Minimum AIC:", toString(output[which.min(output$AIC), ]))
-min_bic_info <- paste("Minimum BIC:", toString(output[which.min(output$BIC), ]))
-min_aicc_info <- paste("Minimum AICc:", toString(output[which.min(output$AICc), ]))
-
-cat(min_aic_info, "\n")
-cat(min_bic_info, "\n")
-cat(min_aicc_info, "\n")
+adf_line(s6, "Level"); adf_line(diff(s6), "First difference")
+k <- suppressWarnings(kpss.test(s6)); cat(sprintf("%-32s KPSS statistic %6.2f   p-value %s\n", "Level", k$statistic, ifelse(k$p.value <= 0.01, "< 0.01", sprintf("%.3f", k$p.value))))
+dc <- decompose(s6); cat(sprintf("Seasonal component range: %.3f to %.3f points. Series standard deviation: %.3f.\n", min(dc$figure), max(dc$figure), sd(s6)))
 ```
 
-**auto.arima**
+The ADF statistic is −3.81 with p = 0.020, rejecting the unit root at the 5% level; the KPSS test rejects stationarity with p = 0.021, so the two tests disagree at the same level. The ACF is 0.74, 0.55, 0.34, 0.21 and is not significant beyond lag 4; the PACF is significant at lag 1 only. The series decays faster than the 3-month spread. The seasonal component spans −0.02 to +0.02 points against a standard deviation of 0.33. The series is modelled in levels without seasonal differencing.
+
+```{r fig.width=9, fig.height=3}
+gridExtra::grid.arrange(
+  ggAcf(s6, 24) + ggtitle("ACF, Level"), ggPacf(s6, 24) + ggtitle("PACF, Level"),
+  ggAcf(diff(s6), 24) + ggtitle("ACF, First Difference"), nrow = 1)
+```
+
+### Model Selection
 
 ```{r}
-auto.arima(ts)
+g6 <- sgrid(s6)
+kable(head(g6, 6), row.names = FALSE, caption = "Six Lowest-AICc Models")
+kable(head(g6[order(g6$BIC), ], 3), row.names = FALSE, caption = "Three Lowest-BIC Models")
+cat("auto.arima with d = 0:\n"); auto.arima(s6, d = 0)
 ```
 
-<br>
+BIC selects `AR(1)`, at −12.2. AIC and AICc select `ARMA(3,2)(0,1)[4]` at −27.8 against −21.6 for `AR(1)`, with seven parameters against one. Among non-seasonal models `AR(3)` has AIC −22.5, one point below `AR(1)`, and a worse BIC. `auto.arima` with d = 0 returns `ARMA(3,3)(1,1)[4]` with zero mean, eight parameters; unconstrained it returns `SARIMA(0,1,0)(2,0,0)[4]`.
 
-### Model Diagnostics
+### Diagnostics
 
-In the model fitting analysis, three prominent models emerged: `SARIMA(0,1,0)(2,0,0)[4]`, `SARIMA(2,1,2)(2,1,1)[4]` and `SARIMA(1,1,1)(2,1,1)[4]`. The diagnostic comparison for these models focuses on evaluating key summary statistics, including the presence of a white noise pattern in the residuals, p-values, and critical model selection criteria like AIC, AICc, and BIC.
+```{r fig.width=9, fig.height=6}
+diag_plot(s6, 1, 0, 0); report(Arima(s6, order = c(1, 0, 0)))
+```
+
+```{r fig.width=9, fig.height=6}
+diag_plot(s6, 3, 0, 0); report(Arima(s6, order = c(3, 0, 0)))
+```
+
+The `AR(1)` coefficient is 0.738 with a standard error of 0.051. The mean is −0.023 with p = 0.72, not distinguishable from zero. The Ljung-Box p-values are 0.42, 0.62 and 0.77. In `AR(3)`, the second lag has p = 0.11 and the third is −0.18 with p = 0.026; its residuals are no cleaner than the `AR(1)`'s. `AR(1)` is retained:
+
+$$X_t - \mu = \phi\,(X_{t-1} - \mu) + w_t, \qquad \hat\phi = 0.738,\ \hat\mu = -0.023.$$
+
+The half-life of a shock is 2.3 quarters, against 4.1 for the 3-month spread. The residual standard deviation is 0.224 points.
+
+### Forecast
 
 ```{r}
-model_output1 <- capture.output(sarima((ts), 0, 1, 0, 2, 0, 0, 4))
-model_output1[22:51]
+fit_s6 <- Arima(s6, order = c(1, 0, 0))
+fc <- forecast(fit_s6, h = 12)
+autoplot(fc) + ggtitle("6-Month Spread, 12-Quarter Forecast") + xlab("Year") + ylab("% points")
 ```
+
+From the last value of 0.25 the point forecast falls to 0.18 in the first quarter of 2024 and is within 0.02 of zero from the third quarter of 2025. The 80% interval twelve quarters ahead is −0.44 to 0.41 and the 95% interval is −0.67 to 0.63, essentially the unconditional distribution of the series.
+
+### Benchmarks
+
+```{r fig.width=9, fig.height=4}
+#| results: asis
+bench(fit_s6, s6, 12, "AR(1)", "% points")
+```
+
+`AR(1)` has the lowest RMSE, 0.222, and MAE, 0.152; the naive and drift methods follow at 0.239 and 0.158, the mean at 0.331, and the seasonal naive at 0.410. The percentage-error columns are again uninformative.
+
+### Cross-Validation
+
+The comparison includes `AR(1)`, `AR(3)`, and the two differenced models `SARIMA(2,1,2)(2,1,1)[4]` and `SARIMA(0,1,0)(2,0,0)[4]`, the latter being the unconstrained `auto.arima` choice. The design is the same as for the 3-month spread.
+
+```{r fig.width=7, fig.height=3.5}
+#| results: asis
+cv_compare(s6, list(
+  list(name = "AR(1)",                 order = c(1, 0, 0), seasonal = c(0, 0, 0), mean = TRUE),
+  list(name = "AR(3)",                 order = c(3, 0, 0), seasonal = c(0, 0, 0), mean = TRUE),
+  list(name = "SARIMA(2,1,2)(2,1,1)[4]", order = c(2, 1, 2), seasonal = c(2, 1, 1), mean = FALSE),
+  list(name = "SARIMA(0,1,0)(2,0,0)[4]", order = c(0, 1, 0), seasonal = c(2, 0, 0), mean = FALSE)))
+```
+
+`AR(1)` has the lowest one-step mean absolute error, 0.116, against 0.120 for `AR(3)`, 0.118 for `SARIMA(0,1,0)(2,0,0)[4]` and 0.132 for `SARIMA(2,1,2)(2,1,1)[4]`. At four quarters ahead the errors are 0.204 for `AR(1)`, 0.209 for `AR(3)`, 0.211 for `SARIMA(2,1,2)(2,1,1)[4]` and 0.256 for `SARIMA(0,1,0)(2,0,0)[4]`. `AR(1)` is the lowest or within 0.002 of the lowest at every horizon, and the differenced models fall behind as the horizon lengthens. For this series the mean is close to zero in both halves of the sample, so the constant-mean assumption that handicapped the 3-month model does not bind.
+
+## Summary
 
 ```{r}
-model_output2 <- capture.output(sarima((ts),2, 1, 2, 2, 1, 1, 4))
-model_output2[121:154]
+summary_tab <- data.frame(
+  Series = c("CPI (log)", "Real GDP (log)", "3-month spread", "6-month spread"),
+  Frequency = c("Monthly", "Quarterly", "Quarterly", "Quarterly"),
+  `Differencing` = c("d = 2", "d = 1, drift", "None", "None"),
+  `Retained model` = c("ARIMA(0,2,2)", "ARIMA(1,1,0)", "AR(1)", "AR(1)"),
+  `Selected by` = c("BIC", "BIC", "BIC", "BIC"),
+  `Residual s.d.` = c("0.0027", "0.0112", "0.183", "0.224"),
+  `Ljung-Box (lag 8, 12, 20)` = c("0.85, < 0.01, < 0.01", "0.61, 0.77, 0.86", "0.14, 0.15, 0.20", "0.42, 0.62, 0.77"),
+  `Training RMSE vs. naive` = c("0.0027 vs. 0.0045", "0.0111 vs. 0.0136", "0.182 vs. 0.189", "0.222 vs. 0.239"),
+  check.names = FALSE)
+kable(summary_tab, row.names = FALSE, caption = "Retained Models")
 ```
 
-```{r}
-model_output3 <- capture.output(sarima((ts),1, 1, 1, 2, 1, 1, 4))
-model_output3[70:101]
-```
+### Model Choice
 
-<br>
+The four series divide into two groups by their order of integration, and the model that fits each group follows from that. CPI and real GDP are trending series that fail the unit root test in levels; the spreads are bounded series that pass it. The two trending series are modelled in differences and the two spreads in levels, and in every case BIC chose the smallest model in the grid that the diagnostics could support.
 
-Equation for `SARIMA(2,1,2)(2,1,1)[4]`:
+For CPI the retained model is `ARIMA(0,2,2)` on the log index. The second difference is used because monthly inflation, the first difference, is stationary by the ADF test but autocorrelated at every lag out to 40; a model in first differences would have needed a high order to absorb that. The two moving-average coefficients, −0.56 and −0.25, make the model equivalent to Holt's linear-trend method, so its forecast extends the level and slope estimated at the end of the sample. That slope reflects the inflation of 2021–2023 and produces a five-year path of 4.4% a year, above the 3.7% recorded over the twelve months to August 2023.
 
-$$(1 - \phi_1 B - \phi_2 B^2)(1 - B)(1 - \Phi_1 B^s - \Phi_2 B^{2s})(1 - B^s)X_t = (1 + \theta_1 B + \theta_2 B^2)(1 + \Theta_1 B^s)W_t$$
-```{r}
-fit <- Arima(ts,order=c(2,1,2), seasonal=c(2,1,1))
-summary(fit)
-```
+For real GDP the retained model is `ARIMA(1,1,0)` with drift on the log level. Quarterly real growth is stationary with a lag-one autocorrelation of 0.13 and no structure beyond lag 2, so a random walk with drift and one autoregressive correction is sufficient. The drift, 0.0076 per quarter, is 3.1% a year, and the forecast grows at that rate. This model replaced the `ARIMA(1,1,1)` that a grid restricted to q = 1 would have selected; the moving-average term in that model had p = 0.16 and its removal lowers every information criterion.
 
-<br>
+For both spreads the retained model is `AR(1)` with a mean. The ACF declines geometrically and the PACF cuts off at lag 1 in both series, and BIC prefers `AR(1)` over every larger model by more than three points. The autoregressive coefficients, 0.84 for the 3-month spread and 0.74 for the 6-month, give half-lives of 4.1 and 2.3 quarters: a shock to the 3-month spread takes about a year to decay by half, and a shock to the 6-month spread about seven months. The 6-month spread's mean is not distinguishable from zero. Seasonal terms were offered to the grid and did not survive: where they enter the AIC-minimising models they appear as near-cancelling pairs, and the seasonal component from a classical decomposition is a tenth of the series' standard deviation.
 
-### Forecasting
+### Residual Diagnostics
 
-The forecasting plot illustrates the historical and predicted quarterly data for the 6 Month Treasury Yield, spanning from 1980 and extending beyond 2020. The historical data, depicted by a solid black line, shows the yield's volatility over time. The forecast, beginning near 2020, is shown with a dotted line and a blue shaded area indicating the prediction intervals, suggesting increased uncertainty in the forecast as time progresses.
+Three of the four retained models have residuals that pass the Ljung-Box test at every lag examined. The exception is CPI, whose residuals fail at lags 12 and 20 with p-values below 0.001 because of autocorrelation at lags 10 to 12. The series is published seasonally adjusted, but the adjustment leaves a small annual pattern in the second difference. `auto.arima`'s seasonal model, `SARIMA(1,2,1)(2,0,0)[12]`, reduces the problem but does not remove it, and was not retained because the gain does not justify three additional parameters for a pattern this small. The 3-month spread's `AR(1)` has one significant residual autocorrelation at lag 3, −0.19, which no model in the grid removes without adding insignificant coefficients. Residuals of both spread models are heavier-tailed than normal, with the largest values in 1982 and 2008, so the prediction intervals understate the tails.
 
-```{r}
-fit %>%
-  forecast(h=12) %>%
-  autoplot() +
-  ylab("Prediction") + xlab("Year") + ggtitle("6 Month Treasury Yield Over Time - Quarterly Data Prediction") + theme(panel.background = element_blank())
-```
+### Forecast Accuracy
 
-<br>
+Against the benchmark methods on the training set, the retained model has the lowest RMSE for all four series. The margins differ. For CPI the model's RMSE is 60% of the naive method's and 80% of the drift method's. For GDP the model and the drift method are within 1% of each other, which is expected since the model is a drift model with a small correction. For the spreads the model's RMSE is 4% and 7% below the naive method's, a small margin, and the mean-percentage measures are not informative because both series cross zero.
 
-### Benchmark Method
+The rolling-origin cross-validation on the spreads gives the only out-of-sample evidence. For the 6-month spread `AR(1)` has the lowest error at every horizon from one to four quarters, with a one-step MAE of 0.116 points. For the 3-month spread `AR(1)` is competitive one step ahead, with a mean squared error of 0.0197 against 0.0195 for the best alternative, but at four quarters ahead its MAE of 0.212 is above the 0.156 of a differenced `SARIMA(1,1,1)(2,1,1)[4]`. The cause is a shift in the spread's mean, from −0.62 over 1982–1989 to −0.10 since 1990, which a constant-mean model cannot accommodate: every forecast is pulled toward a mean estimated from a sample that includes the 1980s. The differenced model avoids that by carrying the current level forward, but it does so through a moving-average coefficient of −1.00, which is the estimator undoing the differencing, and its residuals fail the Ljung-Box test at lag 8. The `AR(1)` is retained as the correctly identified model, with the caveat that its multi-quarter forecasts for the 3-month spread would be improved by a mean estimated on the post-1990 sample or by a model that allows the mean to shift.
 
-The plot compares the performance of several forecasting models for an economic time series, with the `SARIMA` model showing the lowest RMSE and MAE, indicating it has a strong predictive accuracy. The Drift model also performs well in certain metrics like MPE and MAPE. In contrast, the Seasonal Naive model appears to be the least accurate, with the highest error values.
+### Limitations
 
-```{r}
-cat("SARIMA Model Accuracy Metrics:\n")
-pred <- forecast(fit, 12)
-acc_pred <- accuracy(pred)
-print(acc_pred)
-
-cat("\nMean Model Accuracy Metrics:\n")
-f1 <- meanf(ts, h=12)
-acc_f1 <- accuracy(f1)
-print(acc_f1)
-
-cat("\nNaive Model Accuracy Metrics:\n")
-f2 <- naive(ts, h=12)
-acc_f2 <- accuracy(f2)
-print(acc_f2)
-
-cat("\nSeasonal Naive Model Accuracy Metrics:\n")
-f3 <- snaive(ts, h=12)
-acc_f3 <- accuracy(f3)
-print(acc_f3)
-
-cat("\nRandom Walk with Drift Model Accuracy Metrics:\n")
-f4 <- rwf(ts, drift=TRUE, h=12)
-acc_f4 <- accuracy(f4)
-print(acc_f4)
-
-all_acc <- data.frame(
-  SARIMA = acc_pred[1, ],
-  Mean = acc_f1[1, ],
-  Naive = acc_f2[1, ],
-  SeasonalNaive = acc_f3[1, ],
-  Drift = acc_f4[1, ]
-)
-
-all_acc <- t(all_acc)
-lowest_scores <- apply(all_acc, 2, function(x) {names(which.min(x))})
-cat("\nModel with the best Accuracy Metrics:\n",lowest_scores)
-
-autoplot(ts) +
-  autolayer(meanf(ts, h=12),
-            series="Mean", PI=FALSE) +
-  autolayer(naive(ts, h=12),
-            series="Naïve", PI=FALSE) +
-  autolayer(snaive(ts, h=12),
-            series="SNaïve", PI=FALSE)+
-  autolayer(rwf(ts, h=12, drift=TRUE),
-            series="Drift", PI=FALSE)+
-  autolayer(forecast(fit,12), 
-            series="SARIMA",PI=FALSE) +
-  guides(colour=guide_legend(title="Forecast")) +
-  ylab("Prediction") + xlab("Year") + ggtitle("Benchmark Evaluation") + theme(panel.background = element_blank())
-```
-
-<br>
-
-### Cross Validation
-
-The graph displays the MAE and MSE for two models across different forecast horizons. Model 1, represented by the red line, consistently shows a lower MAE than Model 2, the green line, indicating more accurate forecasts at all points. This is supported by one-step ahead cross-validation results where Model 1 has lower MAE and MSE values than Model 2, suggesting that Model 1 has a better predictive performance.
-
-```{r}
-split_index <- floor(length(ts) * 0.4)
-train_size <- split_index
-test_size <- length(ts) - split_index
-errors <- data.frame(err1=rep(NA, test_size), err2=rep(NA, test_size), err3=rep(NA, test_size), err4=rep(NA, test_size))
-
-for(i in 1:test_size) {
-  xtrain <- ts[1:(train_size+i-1)]
-  xtest <- ts[train_size+i]
-  
-  fit1 <- Arima(xtrain, order=c(2,1,2), seasonal=list(order=c(2,1,1), period=4), include.drift=FALSE, method="ML")
-  fcast1 <- forecast(fit1, h=1) 
-
-
-  fit2 <- Arima(xtrain, order=c(1,1,1), seasonal=list(order=c(2,1,1), period=4), include.drift=FALSE, method="ML")
-  fcast2 <- forecast(fit2, h=1) 
-  
-  errors$err1[i] <- abs(fcast1$mean - xtest) 
-  errors$err2[i] <- abs(fcast2$mean - xtest) 
-  errors$err3[i] <- (fcast1$mean - xtest)^2 
-  errors$err4[i] <- (fcast2$mean - xtest)^2 
-}
-
-MAE1 <- mean(errors$err1, na.rm = TRUE)
-MAE2 <- mean(errors$err2, na.rm = TRUE)
-MSE1 <- mean(errors$err3, na.rm = TRUE)
-MSE2 <- mean(errors$err4, na.rm = TRUE)
-
-cat("One-Step Ahead Cross Validation:\n")
-cat("Model 1 - MAE:", MAE1, "MSE:", MSE1, "\n")
-cat("Model 2 - MAE:", MAE2, "MSE:", MSE2, "\n")
-
-if (MAE1 < MAE2 && MSE1 < MSE2) {
-  cat("Model 1 performs better on both MAE and MSE.\n")
-} else if (MAE1 < MAE2) {
-  cat("Model 1 has a lower MAE but not necessarily a lower MSE.\n")
-} else if (MSE1 < MSE2) {
-  cat("Model 1 has a lower MSE but not necessarily a lower MAE.\n")
-} else {
-  cat("Model 2 performs better on both MAE and MSE.\n")
-}
-```
-
-```{r}
-cat("Multi Step Cross Validation:\n")
-n <- length(ts)
-forecast_horizon <- 4
-split_index <- floor(n * 0.6)
-train_size <- split_index
-test_size <- n - split_index
-
-mae1 <- matrix(NA, test_size, forecast_horizon)
-mae2 <- matrix(NA, test_size, forecast_horizon)
-st <- tsp(ts)[1] + (train_size - 1) / frequency(ts)
-
-for(i in 1:test_size) {
-  xtrain <- window(ts, end=st + (i-1)/frequency(ts))
-  xtest <- window(ts, start=st + i/frequency(ts), end=st + (i+forecast_horizon-1)/frequency(ts))
-
-  if (length(xtest) < forecast_horizon) {
-    next 
-  }
-  
-  fit1 <- Arima(xtrain, order=c(2,1,2), seasonal=list(order=c(2,1,1), period=frequency(ts)),
-                include.drift=FALSE, method="ML")
-  fcast1 <- forecast(fit1, h=forecast_horizon)
-  
-  fit2 <- Arima(xtrain, order=c(1,1,1), seasonal=list(order=c(2,1,1), period=frequency(ts)),
-                include.drift=FALSE, method="ML")
-  fcast2 <- forecast(fit2, h=forecast_horizon)
-  
-  mae1[i, ] <- abs(fcast1$mean - xtest)
-  mae2[i, ] <- abs(fcast2$mean - xtest)
-}
-
-plot(1:forecast_horizon, colMeans(mae1, na.rm=TRUE), type="l", col=2, xlab="Horizon", ylab="MAE", ylim=c(0, max(c(colMeans(mae1, na.rm=TRUE), colMeans(mae2, na.rm=TRUE)))))
-lines(1:forecast_horizon, colMeans(mae2, na.rm=TRUE), type="l", col=3)
-legend("topleft", legend=c("M1", "M2"), col=2:3, lty=1)
-```
+All four models are univariate. They describe how each series moves relative to its own past and say nothing about the Federal Funds Rate, which is the variable this project is about. The ARIMAX section that follows adds the policy rate as a regressor. Three further limits apply. The GDP forecast runs fifteen years, far beyond the horizon at which a univariate model is informative; it reports the sample's average growth rate, not a projection of the economy. The CPI forecast inherits the 2021–2023 slope and should be read as a continuation of recent inflation rather than an expectation about it. And the final quarterly observation for both spreads is an average of two trading days, 2 and 3 October 2023, which adds noise to the last point the models fit and forecast from.

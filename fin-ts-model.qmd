@@ -1,225 +1,423 @@
 ---
-title: "Financial Time Series Models (ARCH/GARCH)"
-subtitle: "Exploration of the Volatility Dynamics of the USD Index"
-format:   
+title: "ARCH and GARCH Models"
+subtitle: "Volatility of the Broad Dollar Index and the S&P 500"
+date: "2023-12-3"
+date-modified: today
+date-format: long
+format:
   html:
     smooth-scroll: true
     toc: true
     code-fold: true
     code-tools: true
+    lightbox: true
     embed-resources: true
-    mermaid:
-      theme: neutral
 bibliography: citation.bib
-execute: 
+execute:
   echo: false
   warning: false
+  message: false
 ---
 
-```{r}
-library(reshape2)
-library(dplyr)
-library(parallel)
-library(zoo)
-library(TTR)
-library(readr)
-library(readxl)
-library(tidyverse)
-library(ggplot2)
-library(forecast)
-library(astsa)
-library(xts)
-library(tseries)
-library(fpp2)
-library(fma)
-library(lubridate)
-library(TSstudio)
-library(quantmod)
-library(tidyquant)
-library(plotly)
-library(knitr)
-library(vars)
-library(TSA)
-library(fGarch) 
-library(dynlm)
-library(FinTS)
-library(rugarch)
-```
+```{r setup}
+suppressMessages({
+  library(readxl); library(dplyr); library(ggplot2); library(forecast); library(tseries)
+  library(rugarch); library(FinTS); library(moments); library(xts); library(knitr); library(lubridate); library(vars); library(fGarch)
+})
+theme_set(theme_minimal(base_size = 11) + theme(panel.grid.minor = element_blank()))
+fmt_p <- function(p) ifelse(p < 0.001, "< 0.001", formatC(p, format = "f", digits = 3))
 
-## Literature Review
+# rugarch specification with an AR(1) mean and the given variance model.
+spec <- function(model, order, dist) ugarchspec(variance.model = list(model = model, garchOrder = order),
+                                                 mean.model = list(armaOrder = c(1, 0), include.mean = TRUE), distribution.model = dist)
 
-Using an ARCH/GARCH model on the USD index is crucial for several key reasons. Firstly, it excels in forecasting financial time series volatility, which is vital for investors and policymakers in anticipating market fluctuations. This is especially important for risk management in international trade and investment, as understanding the volatility of the USD index allows businesses and investors to make more informed decisions and mitigate potential risks. Additionally, since the USD index is a significant economic indicator, reflecting the value of the U.S. dollar relative to a basket of foreign currencies, employing an ARCH model can offer deeper insights into the dynamics of currency markets. These insights are invaluable for economic policy and strategy formulation. Furthermore, for companies engaged in international business, accurately modeling USD index volatility can assist in strategic planning, particularly in currency hedging and pricing strategies. Finally, by providing a more accurate understanding of future price movements and volatility, ARCH models contribute to enhancing the efficiency of financial markets, benefiting a wide range of market participants. Overall, the application of an ARCH model to the USD index is essential for better market understanding, effective risk management, and strategic economic decision-making.
-
-## Data Processing
-
-The first plot shows the USD Index value over time, illustrating how the strength of the US dollar has changed against a basket of foreign currencies. It highlights a significant dip around 2008, which aligns with the financial crisis, followed by a general upward trend with some intermittent volatility, reflecting various economic conditions and policy changes.
-
-The second plot represents the returns of the USD Index over the same time frame. Unlike the first plot, which shows the value, this one focuses on the rate of change, indicating the volatility of the returns. The returns fluctuate around zero, with several spikes both upwards and downwards, which suggests periods of increased volatility.
-
-```{r}
-df_usd <- read_excel('data/data/usd.xlsx')
-df_usd <- na.omit(df_usd)
-df_usd$Date <- as.Date(df_usd[[1]])
-df_usd$USD <- as.numeric(df_usd[[2]])
-ts_usd <- ts(df_usd$USD, start = c(year(min(df_usd$Date)), as.numeric(format(min(df_usd$Date), "%j"))), frequency = 262)
-
-autoplot(ts_usd) + 
-    ggtitle("USD Index Over Time") +
-    xlab("Year") + 
-    ylab("USD Index") + 
-    theme(panel.background = element_blank())
-
-usd_return <- diff(ts_usd)
-autoplot(usd_return) +
-  labs(x = "Year",
-       y = "USD Index Return",
-       title = "USD Index Return Over Time") +
-  theme(panel.background = element_blank())
-```
-
-<br>
-
-## ARMA Model Fitting
-
-In the ACF plot for the squared returns, significant autocorrelation at various lags that exceed the confidence bands is observed. This indicates that there is volatility clustering in the data, where large changes in returns tend to be followed by large changes, and small changes tend to be followed by small changes.
-
-The PACF plot for the squared returns also shows some significant spikes at early lags, which may indicate that there is a relationship between the current squared return and its previous values that is not explained by its more recent past.
-
-```{r}
-ggAcf(usd_return,40) + theme(panel.background = element_blank())
-ggPacf(usd_return,40) + theme(panel.background = element_blank())
-ggAcf(usd_return^2,40) + theme(panel.background = element_blank())
-ggPacf(usd_return^2,40) + theme(panel.background = element_blank())
-```
-
-<br>
-
-### Hyperparameter Tuning
-
-Both AIC and AICc indicate that an `ARMA(1,0)` model is preferred, implying the data is best described by one autoregressive term. In contrast, BIC points to a simpler `ARMA(0,0)` model, implying that the returns might be random and not significantly influenced by past values.
-
-```{r}
-i=1
-temp= data.frame()
-ls=matrix(rep(NA,6*10),nrow=10)
-
-for (p in 0:1)
-{
-  for(q in 0:1)
-  {
-    for(d in 0:1)
-    {
-      
-      if(p+d+q<=8)
-      {
-        model<- Arima(usd_return,order=c(p,d,q))
-        ls[i,]= c(p,d,q,model$aic,model$bic,model$aicc)
-        i=i+1
-
-      }
-      
-    }
-  }
+# Coefficient table and standardised-residual diagnostics for a ugarchfit.
+report_g <- function(fit) {
+  mc <- fit@fit$matcoef
+  tab <- data.frame(Coefficient = rownames(mc), Estimate = round(mc[, 1], 4), `Std. Error` = round(mc[, 2], 4),
+                    t = round(mc[, 3], 2), p = formatC(mc[, 4], format = "f", digits = 4), check.names = FALSE)
+  z <- as.numeric(residuals(fit, standardize = TRUE)); ic <- infocriteria(fit)
+  cat(sprintf("Log-likelihood %.1f   AIC %.4f   BIC %.4f (per observation)   persistence %.4f   unconditional daily s.d. %.3f%%\n",
+              likelihood(fit), ic[1], ic[2], persistence(fit), sqrt(uncvariance(fit))))
+  cat(sprintf("Standardised residuals: Ljung-Box p at lag 10 / 20 = %.3f / %.3f;  squared: %.3f / %.3f;  ARCH-LM(12) p = %.3f;  kurtosis %.2f\n",
+              Box.test(z, 10, "Ljung-Box", fitdf = 1)$p.value, Box.test(z, 20, "Ljung-Box", fitdf = 1)$p.value,
+              Box.test(z^2, 10, "Ljung-Box")$p.value, Box.test(z^2, 20, "Ljung-Box")$p.value, ArchTest(z, 12)$p.value, kurtosis(z)))
+  kable(tab, row.names = FALSE, align = "lrrrr")
 }
-
-temp= as.data.frame(ls)
-names(temp)= c("p","d","q","AIC","BIC","AICc")
-aic_row <- paste("Model fitting with minimum AIC:\n", toString(temp[which.min(temp$AIC),]))
-aicc_row <- paste("\nModel fitting with minimum AICc:\n", toString(temp[which.min(temp$AICc),]))
-bic_row <- paste("\nModel fitting with minimum BIC:\n", toString(temp[which.min(temp$BIC),]))
-all_rows <- paste(aic_row, aicc_row, bic_row, sep="\n")
-cat(all_rows)
 ```
 
-<br>
+***
+### Purpose
 
-### Model Diagnostics
+The models in the preceding sections describe the level of a series. This section models its variance. Daily returns on the dollar index are close to unpredictable in sign but not in size: large moves cluster, and a day of large movement is more likely to be followed by another. The ARCH model [@engle1982] and its generalisation, GARCH [@bollerslev1986], describe that clustering by letting the conditional variance of the return depend on recent squared returns and on its own past. The section fits a mean equation for the return, tests for ARCH effects in its residuals, compares nine specifications of the variance equation, checks the retained model's residuals, examines the volatility it estimates over the sample, evaluates its one-day-ahead variance forecasts out of sample against simpler methods, forecasts volatility sixty trading days ahead, and then asks whether the Federal Funds Rate explains any of the volatility, in the variance equation at daily frequency and in the relationship between monthly realised volatility and the policy rate. Estimation uses the `rugarch` package [@ghalanos2024].
 
-The `ARMA(1,0)` model's diagnostics indicate a good fit for the **`usd_return`** data, with no significant autocorrelation in the residuals and a generally normal distribution of standardized residuals. The convergence of the model and low AIC, AICc, and BIC values also support its adequacy.
+## Data
+
+The series is `DTWEXBGS`, the nominal broad dollar index, daily from 2 January 2006 to 24 November 2023, an index with January 2006 = 100. It is converted to daily log returns in %, $r_t = 100\,(\log P_t - \log P_{t-1})$, which gives 4,487 returns. The index rose from 101.4 to 120.7 over the sample, with a low of 85.5 in July 2011 and a high of 128.3 in September 2022.
 
 ```{r}
-model_output1 <- capture.output(sarima(usd_return,1,0,0))
-model_output1[13:41]
+d <- na.omit(read_excel("data/data/usd.xlsx")); d <- data.frame(Date = as.Date(d[[1]]), v = as.numeric(d[[2]]))
+r <- 100 * diff(log(d$v)); dates <- d$Date[-1]; n <- length(r); rx <- xts(r, dates)
+gridExtra::grid.arrange(
+  ggplot(d, aes(Date, v)) + geom_line() + ggtitle("Broad Dollar Index, Daily") + xlab("Year") + ylab("Index, Jan 2006 = 100"),
+  ggplot(data.frame(Date = dates, r = r), aes(Date, r)) + geom_line() + ggtitle("Daily Log Return") + xlab("Year") + ylab("%"), nrow = 2)
 ```
-
-## GARCH Model Fitting
-
-The ACF and PACF plots of the squared residuals from the ARMA(1,0) model indicate the presence of volatility clustering. The significant spikes across various lags in the ACF plot suggest an ARCH effect. This pattern implies that ARCH or GARCH is more appropriate for capturing the observed volatility dynamics in the USD index returns.
 
 ```{r}
-fit<-Arima(usd_return,order=c(1,0,0),include.drift = TRUE)
-res<-fit$residuals
-ggAcf(res^2,40) + theme(panel.background = element_blank())
-ggPacf(res^2,40) + theme(panel.background = element_blank())
+stats <- data.frame(
+  Statistic = c("Observations", "Mean, % per day", "Standard deviation, % per day", "Annualised standard deviation, %", "Skewness", "Excess kurtosis", "Minimum, %", "Maximum, %"),
+  Value = c(format(n, big.mark = ","), sprintf("%.4f", mean(r)), sprintf("%.3f", sd(r)), sprintf("%.2f", sd(r) * sqrt(252)), sprintf("%.3f", skewness(r)), sprintf("%.2f", kurtosis(r) - 3),
+            sprintf("%.2f on %s", min(r), format(dates[which.min(r)], "%d %b %Y")), sprintf("%.2f on %s", max(r), format(dates[which.max(r)], "%d %b %Y"))))
+kable(stats, row.names = FALSE, caption = "Daily Log Returns, 2006–2023")
 ```
 
-<br>
+The mean return is 0.004% a day, indistinguishable from zero. The standard deviation is 0.35% a day, 5.5% a year, low by the standards of equity indices and typical of a trade-weighted currency basket. Skewness is zero. Excess kurtosis is 4.4: the return distribution has far heavier tails than a normal distribution, and the Jarque-Bera test rejects normality with a p-value below 0.001. The largest daily moves are −2.56% on 19 March 2009, following the Federal Reserve's announcement of large-scale Treasury purchases on 18 March, and +1.90% on 22 September 2011.
 
-### Hyperparameter Tuning
+## Properties of the Returns
 
-The `GARCH(1,1)` model parameters suggest that volatility shocks have a significant impact on current volatility, with a high persistence of these shocks over time. This indicates a stable model with long-lasting effects of volatility in the data.
+```{r fig.width=9, fig.height=6}
+gridExtra::grid.arrange(
+  ggAcf(r, 40) + ggtitle("ACF, Returns"), ggPacf(r, 40) + ggtitle("PACF, Returns"),
+  ggAcf(r^2, 40) + ggtitle("ACF, Squared Returns"), ggPacf(r^2, 40) + ggtitle("PACF, Squared Returns"), nrow = 2)
+```
 
 ```{r}
-model <- list()
-cc <- 1
-for (p in 1:1) {
-  for (q in 1:1) {
-    model[[cc]] <- garch(res,order=c(q,p),trace=F)
-    cc <- cc + 1
-  }
-} 
-
-GARCH_AIC <- sapply(model, AIC)
-model[[which(GARCH_AIC == min(GARCH_AIC))]]
+cat(sprintf("ADF statistic, returns: %.2f (p < 0.01).   Jarque-Bera p %s.\n", suppressWarnings(adf.test(r))$statistic, fmt_p(jarque.bera.test(r)$p.value)))
+cat(sprintf("Ljung-Box, returns, lag 10 / 20: p = %.4f / %.4f.   Squared returns: p %s / %s.\n", Box.test(r, 10, "Ljung-Box")$p.value, Box.test(r, 20, "Ljung-Box")$p.value, fmt_p(Box.test(r^2, 10, "Ljung-Box")$p.value), fmt_p(Box.test(r^2, 20, "Ljung-Box")$p.value)))
+at <- ArchTest(r, lags = 12); cat(sprintf("Engle ARCH-LM test, 12 lags: statistic %.1f, p %s.\n", at$statistic, fmt_p(at$p.value)))
 ```
 
-<br>
+The returns are stationary (ADF −15.5) and nearly uncorrelated: the first-order autocorrelation is 0.04, and only five of the first forty autocorrelations lie outside the 95% band, though the Ljung-Box test rejects independence at lag 10 (p = 0.002) because of the lag-one value. The squared returns are a different matter. Their autocorrelation is 0.10 at lag one, 0.16 at lag two and 0.22 at lag four, all forty lags are outside the band, and the Ljung-Box p-values are below 0.001. Engle's Lagrange-multiplier test for ARCH effects at twelve lags gives a statistic of 548 against a 5% critical value of 21. The variance of the return is predictable from its past even though the return itself is not, which is the condition a GARCH model is built for.
 
-### Model Summary
+## Mean Equation
 
-The `GARCH(1,1)` model indicates significant volatility patterns in the USD index returns. High significance of model coefficients suggests that past volatility has a strong influence on future volatility. The Jarque-Bera test shows that the return distribution is not normal, hinting at the potential for extreme movements. The Box-Ljung test confirms that the model captures these patterns well.
+Before the variance is modelled, the small autocorrelation in the returns is removed with an ARMA model so that the variance model is applied to innovations.
 
 ```{r}
-fit <- garch(x = res, order = c(1, 1), trace = FALSE)
-summary <- summary(fit)
-summary
+g <- expand.grid(p = 0:2, q = 0:2)
+ic <- t(apply(g, 1, function(o) { m <- Arima(r, order = c(o[1], 0, o[2])); c(m$aic, m$aicc, m$bic) }))
+g <- cbind(g, AIC = round(ic[, 1], 2), AICc = round(ic[, 2], 2), BIC = round(ic[, 3], 2)); g <- g[order(g$AICc), ]
+kable(head(g, 5), row.names = FALSE, caption = "Five Lowest-AICc ARMA Orders for the Returns")
+cat(sprintf("\nLowest BIC: ARMA(%d,%d), BIC %.2f.\n", g$p[which.min(g$BIC)], g$q[which.min(g$BIC)], min(g$BIC)))
+m_ar1 <- Arima(r, order = c(1, 0, 0)); se <- sqrt(diag(m_ar1$var.coef)); e <- residuals(m_ar1)
+cat(sprintf("\nAR(1): coefficient %.4f (s.e. %.4f), mean %.4f (s.e. %.4f). auto.arima selects ARMA(%s).\n", coef(m_ar1)[1], se[1], coef(m_ar1)[2], se[2], paste(arimaorder(auto.arima(r))[c(1, 3)], collapse = ",")))
+cat(sprintf("Residuals: Ljung-Box p at lag 10 / 20 = %.3f / %.3f.   Squared residuals: p %s / %s.\n", Box.test(e, 10, "Ljung-Box", fitdf = 1)$p.value, Box.test(e, 20, "Ljung-Box", fitdf = 1)$p.value, fmt_p(Box.test(e^2, 10, "Ljung-Box")$p.value), fmt_p(Box.test(e^2, 20, "Ljung-Box")$p.value)))
 ```
 
-<br>
+AIC and AICc select `AR(1)` and `MA(1)` within 0.03 of each other; BIC selects white noise, `ARMA(0,0)`, since the autocorrelation being modelled is 0.04. `auto.arima` selects `AR(1)`, which is used as the mean equation in every variance model below. Its coefficient is 0.040 with a standard error of 0.015. The residuals still show some autocorrelation at lags 8 to 20 (Ljung-Box p = 0.016 at lag 10), which is small in size and is left; their squares are as strongly autocorrelated as the raw squared returns.
 
-### Final Model
+## Variance Equation
 
-$$ x_t = \mu + z_t $$ $$z_t=\sigma_t \epsilon_t$$
+### Model Selection
 
-$$\sigma_t = 0.0005776 + 0.0535034 (z_{t-1}) + 0.9440053 (\sigma_{t-1})$$
-
-## Forecasting
-
-The plot suggests that the model expects the variable to remain relatively stable in the near future. The fact that the bands are quite narrow suggests the model is confident about its forecasts.
+Nine variance specifications are estimated jointly with the `AR(1)` mean by maximum likelihood: `ARCH(1)` and `ARCH(4)`, in which the variance depends only on recent squared innovations; `GARCH(1,1)`, `GARCH(1,2)` and `GARCH(2,1)` with normal innovations; `GARCH(1,1)` with Student-t innovations, which allows the heavy tails found above; `GARCH(1,1)` with skewed-t innovations; and two asymmetric models with Student-t innovations, `GJR-GARCH(1,1)` [@glosten1993], in which a negative innovation adds a separate term to the variance, and `EGARCH(1,1)`, which models the log variance. Persistence is the sum of the ARCH and GARCH coefficients for the symmetric models, and the equivalent quantity for the asymmetric ones; the closer it is to one, the longer a shock to the variance lasts.
 
 ```{r}
-fit = garchFit(~ garch(1, 1), data = res, trace = FALSE)
-predict <- predict(fit, n.ahead = 200, plot=TRUE)
+cands <- list(
+  "ARCH(1), normal"          = spec("sGARCH",   c(1, 0), "norm"),
+  "ARCH(4), normal"          = spec("sGARCH",   c(4, 0), "norm"),
+  "GARCH(1,1), normal"       = spec("sGARCH",   c(1, 1), "norm"),
+  "GARCH(1,2), normal"       = spec("sGARCH",   c(1, 2), "norm"),
+  "GARCH(2,1), normal"       = spec("sGARCH",   c(2, 1), "norm"),
+  "GARCH(1,1), Student-t"    = spec("sGARCH",   c(1, 1), "std"),
+  "GARCH(1,1), skewed-t"     = spec("sGARCH",   c(1, 1), "sstd"),
+  "GJR-GARCH(1,1), Student-t" = spec("gjrGARCH", c(1, 1), "std"),
+  "EGARCH(1,1), Student-t"   = spec("eGARCH",   c(1, 1), "std"))
+fits <- lapply(cands, function(s) ugarchfit(s, r, solver = "hybrid"))
+sel <- data.frame(Model = names(fits),
+                  Parameters = sapply(fits, function(f) length(coef(f))),
+                  `Log-likelihood` = sapply(fits, function(f) round(likelihood(f), 1)),
+                  AIC = sapply(fits, function(f) round(infocriteria(f)[1], 4)),
+                  BIC = sapply(fits, function(f) round(infocriteria(f)[2], 4)),
+                  Persistence = sapply(fits, function(f) round(persistence(f), 4)), check.names = FALSE)
+kable(sel, row.names = FALSE, caption = "Variance Specifications, AR(1) Mean; Information Criteria per Observation")
 ```
 
-The volatility plot from the GARCH model on USD returns highlights periods of heightened volatility with shaded areas, aligning with significant economic events. Notably, the plot shows increased volatility during the **2008-2009 global financial crisis**, the **2010 European debt crisis**, the **2020 COVID-19 pandemic,** and the **2022-2023 Federal Reserve** **Inflationary Countermeasure**. The accompanying R code snippet details the creation of this plot, plotting estimated volatility against time and marking key periods with shaded rectangles. This visual analysis suggests that the U.S. Dollar Index experienced its most significant volatility during these marked economic events, as shown by the frequency and magnitude of the peaks in the plot.
+The results separate into three steps. Moving from `ARCH(4)` to `GARCH(1,1)` raises the log-likelihood by 182 with two fewer parameters: the lagged variance term captures what a long series of ARCH lags approximates. Adding a second ARCH or GARCH lag changes the likelihood by less than one point, so `GARCH(1,1)` is the right order. Replacing the normal distribution with the Student-t raises the log-likelihood by 93 for one parameter, with an estimated 7.4 degrees of freedom; the skewed-t adds three more points and a skewness parameter of 1.05, not distinguishable from symmetry. Allowing asymmetry raises the log-likelihood by a further 10 points for one parameter in both the GJR and EGARCH forms, which are equivalent on every criterion. The GJR form is retained because its asymmetry parameter has a direct reading. Persistence is 0.995 or 0.996 in every GARCH model.
+
+### Diagnostics
 
 ```{r}
-ht <- fit@h.t
-date <- df_usd$Date[-1]
-data= data.frame(ht,date)
-data$date <- as.Date(data$date, format="%Y-%m-%d")
-
-plot <- ggplot(data, aes(y = ht, x = date)) + 
-  geom_line() +
-  ylab('Estimated Volatility') +
-  xlab('Year') +
-  ggtitle("U.S. Dollar Volatility Over Time") +
-  theme(panel.background = element_blank()) +
-  annotate("rect", xmin = as.Date("2007-09-01"), xmax = as.Date("2009-03-01"), ymin = 0, ymax = 1, alpha = 0.2) +
-  annotate("rect", xmin = as.Date("2010-05-01"), xmax = as.Date("2010-08-01"), ymin = 0, ymax = 1, alpha = 0.2) +
-  annotate("rect", xmin = as.Date("2020-02-01"), xmax = as.Date("2020-04-15"), ymin = 0, ymax = 1, alpha = 0.2) +
-  annotate("rect", xmin = as.Date("2022-03-01"), xmax = as.Date("2023-08-01"), ymin = 0, ymax = 1, alpha = 0.2)
-
-print(plot)
+fit_t <- fits[["GARCH(1,1), Student-t"]]; fit_g <- fits[["GJR-GARCH(1,1), Student-t"]]
+cat("GARCH(1,1), Student-t\n"); report_g(fit_t)
 ```
+
+```{r}
+cat("GJR-GARCH(1,1), Student-t\n"); report_g(fit_g)
+```
+
+```{r}
+lr <- 2 * (likelihood(fit_g) - likelihood(fit_t))
+cat(sprintf("Likelihood-ratio test, GJR against symmetric GARCH: statistic %.2f, p %s.\n\n", lr, fmt_p(pchisq(lr, 1, lower.tail = FALSE))))
+sb_t <- signbias(fit_t); sb_g <- signbias(fit_g)
+kable(data.frame(Test = rownames(sb_t), `GARCH(1,1) p` = fmt_p(sb_t$prob), `GJR-GARCH(1,1) p` = fmt_p(sb_g$prob), check.names = FALSE), row.names = FALSE, caption = "Sign-Bias Tests on Standardised Residuals")
+```
+
+Both models pass every test on the standardised residuals: no autocorrelation in the residuals or their squares at lags 10 or 20, and no remaining ARCH effect (LM p-values of 0.91 and 0.97). The standardised residuals have kurtosis of about 5, which the Student-t with 7.4 to 7.6 degrees of freedom accommodates. The models differ on asymmetry. In the symmetric model the negative-sign-bias test rejects at p = 0.018: the variance responds to the sign of the previous innovation in a way the model does not capture. The GJR model's asymmetry coefficient is −0.036 with a standard error of 0.008, the likelihood-ratio test rejects the symmetric model with p < 0.001, and the sign-bias tests no longer reject jointly (p = 0.27).
+
+The sign of the asymmetry is the reverse of what is found in equity markets. In the GJR model the coefficient on a squared innovation is $\alpha$ when the innovation is positive and $\alpha + \gamma$ when it is negative. Here $\alpha = 0.058$ and $\gamma = -0.036$, so a positive innovation, a rise in the dollar, adds 0.058 times its square to next day's variance, and a fall in the dollar adds 0.022 times its square. Dollar appreciations are the larger source of volatility. This fits the dollar's role in the sample: it rises when investors leave riskier assets, in the autumn of 2008, in the spring of 2020 and during 2022, and those are the periods in which its volatility is highest.
+
+The retained model, with $r_t$ the daily log return in %, $\varepsilon_t$ the innovation, $\sigma_t^2$ its conditional variance and $I_{t-1} = 1$ when $\varepsilon_{t-1} < 0$, is
+
+$$r_t = -0.0001 + 0.039\, r_{t-1} + \varepsilon_t, \qquad \varepsilon_t = \sigma_t z_t, \quad z_t \sim t_{7.6},$$
+
+$$\sigma_t^2 = 0.0005 + \left(0.058 - 0.036\, I_{t-1}\right)\varepsilon_{t-1}^2 + 0.956\, \sigma_{t-1}^2.$$
+
+Persistence is 0.9955, so half of a shock to the variance remains after 155 trading days. The unconditional daily standard deviation implied by the model is 0.34%.
+
+## Conditional Volatility
+
+```{r fig.width=9, fig.height=4.5}
+sig <- data.frame(Date = dates, sigma = as.numeric(sigma(fit_g)))
+events <- data.frame(start = as.Date(c("2007-09-01", "2010-05-01", "2016-06-20", "2020-02-01", "2022-03-01")),
+                     end = as.Date(c("2009-03-31", "2010-08-31", "2016-07-15", "2020-04-30", "2023-08-31")),
+                     label = c("Financial crisis", "Euro-area debt crisis", "Brexit vote", "Pandemic", "Fed tightening"))
+ggplot() + geom_rect(data = events, aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf), fill = "grey85") +
+  geom_line(data = sig, aes(Date, sigma)) +
+  geom_text(data = events, aes(x = start + (end - start) / 2, y = c(0.98, 0.92, 0.98, 0.92, 0.98), label = label), size = 3, vjust = 1) +
+  ggtitle("Conditional Standard Deviation of Daily Dollar Returns, GJR-GARCH(1,1)") + xlab("Year") + ylab("% per day")
+```
+
+```{r}
+ev <- events; ev$`Mean σ, %` <- NA; ev$`Peak σ, %` <- NA; ev$`Peak date` <- NA
+for (i in seq_len(nrow(ev))) { w <- sig$Date >= ev$start[i] & sig$Date <= ev$end[i]
+  ev$`Mean σ, %`[i] <- round(mean(sig$sigma[w]), 3); ev$`Peak σ, %`[i] <- round(max(sig$sigma[w]), 3); ev$`Peak date`[i] <- format(sig$Date[w][which.max(sig$sigma[w])], "%d %b %Y") }
+ev$Period <- paste(format(ev$start, "%b %Y"), "to", format(ev$end, "%b %Y"))
+kable(ev[, c("label", "Period", "Mean σ, %", "Peak σ, %", "Peak date")], col.names = c("Episode", "Period", "Mean σ, %", "Peak σ, %", "Peak date"), row.names = FALSE,
+      caption = sprintf("Conditional Volatility in Five Episodes; Full-Sample Median %.3f%%, 10th and 90th Percentiles %.3f%% and %.3f%%", median(sig$sigma), quantile(sig$sigma, 0.1), quantile(sig$sigma, 0.9)))
+```
+
+The estimated conditional standard deviation has a median of 0.31% a day and ranges from 0.15% in July 2014 to 0.95% on 23 October 2008. The five shaded episodes are the periods the visualisation page identified as dollar shocks. The financial crisis is in a class of its own: the five highest readings in the sample all fall between 23 October and 13 November 2008, the peak is three times the median, and the episode's mean of 0.43% a day is close to the sample's 90th percentile of 0.45%. The pandemic peak, 0.71% on 2 April 2020, is the second-highest cluster. The 2010 euro-area episode, the week after the Brexit vote and the 2022–2023 tightening all raised volatility to about 0.5 to 0.57% at their peaks, one and a half to two times the median, and the tightening episode, though long, averaged only 0.37%. Two peaks outside the shaded windows are also visible: 0.69% on 2 November 2011, in the second phase of the euro-area crisis, and 0.51% on 21 June 2013, during the bond-market reaction to the Federal Reserve's tapering announcement. The plot also shows the long quiet period from 2012 to 2019, in which volatility exceeded 0.4% on 11% of days.
+
+## Out-of-Sample Evaluation
+
+The variance is not observed, so a volatility forecast is evaluated against a proxy, here the squared return, using two loss functions: mean squared error, and the QLIKE loss $\log\sigma^2 + r^2/\sigma^2$, which is robust to the noise in the proxy and penalises under-prediction of variance more than over-prediction [@patton2011]. Three GARCH models are re-estimated every 250 trading days on a moving window of 2,500 days and used to forecast the next day's variance, over the last 30% of the sample, 1,346 days from July 2018 to November 2023. They are compared with three methods that need no estimation: the exponentially weighted moving average of squared returns with decay 0.94, the RiskMetrics convention; the variance of the previous 22 returns; and the constant variance of the training period.
+
+```{r}
+nf <- floor(0.3 * n)
+rolls <- lapply(c("GARCH(1,1), normal", "GARCH(1,1), Student-t", "GJR-GARCH(1,1), Student-t"), function(nm)
+  ugarchroll(cands[[nm]], rx, n.ahead = 1, forecast.length = nf, refit.every = 250, refit.window = "moving", window.size = 2500,
+             solver = "hybrid", calculate.VaR = TRUE, VaR.alpha = c(0.01, 0.05)))
+names(rolls) <- c("GARCH(1,1), normal", "GARCH(1,1), Student-t", "GJR-GARCH(1,1), Student-t")
+rt <- r[(n - nf + 1):n]
+ew <- numeric(n); ew[1] <- var(r[1:250]); for (t in 2:n) ew[t] <- 0.94 * ew[t - 1] + 0.06 * r[t - 1]^2
+rv22 <- sapply((n - nf + 1):n, function(t) var(r[(t - 22):(t - 1)]))
+cst <- rep(var(r[1:(n - nf)]), nf)
+loss <- function(s2, e2) c(MSE = mean((s2 - e2)^2), QLIKE = mean(log(s2) + e2 / s2))
+lt <- rbind(t(sapply(rolls, function(ro) loss(as.numeric(ro@forecast$density$Sigma)^2, rt^2))),
+            `EWMA, decay 0.94` = loss(ew[(n - nf + 1):n], rt^2), `22-day rolling variance` = loss(rv22, rt^2), `Constant variance` = loss(cst, rt^2))
+kable(data.frame(Method = rownames(lt), round(lt, 4), check.names = FALSE), row.names = FALSE,
+      caption = sprintf("One-Day-Ahead Variance Forecasts, %s to %s, %d Days", format(dates[n - nf + 1], "%b %Y"), format(dates[n], "%b %Y"), nf))
+vt <- do.call(rbind, lapply(names(rolls), function(nm) do.call(rbind, lapply(c(0.01, 0.05), function(a) {
+  ro <- rolls[[nm]]; v <- VaRTest(a, actual = as.numeric(ro@forecast$VaR[, "realized"]), VaR = as.numeric(ro@forecast$VaR[, paste0("alpha(", a * 100, "%)")]))
+  data.frame(Model = nm, `VaR level` = paste0(a * 100, "%"), Expected = round(v$expected.exceed), Actual = v$actual.exceed,
+             `Kupiec p` = fmt_p(v$uc.LRp), `Christoffersen p` = fmt_p(v$cc.LRp), check.names = FALSE) }))))
+kable(vt, row.names = FALSE, caption = "Value-at-Risk Exceedances and Coverage Tests")
+```
+
+The GJR model has the lowest loss on both criteria, MSE 0.0455 and QLIKE −1.410, followed by the two symmetric GARCH models, which are equivalent to each other, and then the EWMA at 0.0458 and −1.391. The 22-day variance and the constant variance are clearly worse, the constant variance by 0.15 on QLIKE. The margins among the GARCH models and the EWMA are small on MSE, which is dominated by the few days of largest squared returns, and clearer on QLIKE.
+
+The value-at-risk tests ask whether the forecast distribution's 1% and 5% quantiles are exceeded at the right frequency and whether exceedances are independent. All three models pass both tests at both levels. The normal model comes closest to failing at 1%, with 19 exceedances against 13.5 expected, the usual consequence of a thin-tailed distribution; the two Student-t models have 11 exceedances each. At 5% all three models are slightly conservative, with 55 to 60 exceedances against 67 expected.
+
+## Forecast
+
+```{r fig.width=9, fig.height=4}
+fc <- ugarchforecast(fit_g, n.ahead = 60)
+hist <- tail(sig, 250)
+fut <- data.frame(Date = dates[n] + 1:60 * 1.4, sigma = as.numeric(sigma(fc)))  # trading days plotted at 1.4 calendar days
+ggplot() + geom_line(data = hist, aes(Date, sigma)) + geom_line(data = fut, aes(Date, sigma), colour = "steelblue4") +
+  geom_hline(yintercept = sqrt(uncvariance(fit_g)), linetype = 2) +
+  ggtitle("Conditional Standard Deviation, Last 250 Days and 60-Day Forecast") + xlab("Date") + ylab("% per day")
+cat(sprintf("Forecast conditional s.d.: day 1 %.3f%%, day 20 %.3f%%, day 60 %.3f%%; last estimated value %.3f%%; unconditional %.3f%%. Annualised day-1 forecast: %.1f%%.\n",
+            sigma(fc)[1], sigma(fc)[20], sigma(fc)[60], tail(sig$sigma, 1), sqrt(uncvariance(fit_g)), sigma(fc)[1] * sqrt(252)))
+```
+
+At the end of the sample the conditional standard deviation is 0.32% a day, slightly below the model's unconditional level of 0.34%. The forecast rises toward the unconditional level along the persistence, from 0.322% on the first day to 0.326% on the sixtieth; with a half-life of 155 days the convergence is slow. The forecast carries no information about direction. It says that the dollar in late 2023 was in a period of ordinary volatility, about 5% a year, and that absent a new shock it would stay there. The dashed line is the unconditional standard deviation.
+
+## The Federal Funds Rate and Dollar Volatility
+
+The model above describes the dollar's volatility from its own past. This section asks whether the Federal Funds Rate adds to that description, in two ways: as a regressor in the variance equation at daily frequency, and through the relationship between monthly realised volatility and the policy rate. The policy rate is `FEDFUNDS`, the monthly average effective rate; each trading day is assigned its month's value, and the change is the difference between the month's average and the previous month's. The rate series ends in August 2023, so this section uses the 4,430 trading days from January 2006 to August 2023, 212 months, in 160 of which the rate changed.
+
+```{r}
+ff <- na.omit(read_excel("data/data/fedfunds.xlsx")); ff <- data.frame(M = floor_date(as.Date(ff[[1]]), "month"), ffr = as.numeric(ff[[2]]))
+ff$dffr <- c(NA, diff(ff$ffr))
+dd <- data.frame(Date = dates, r = r, M = floor_date(dates, "month")) |> left_join(ff, by = "M")
+dd <- dd[!is.na(dd$dffr), ]; r2 <- dd$r
+X_lvl <- matrix(dd$ffr, ncol = 1, dimnames = list(NULL, "FFR level")); X_abs <- matrix(abs(dd$dffr), ncol = 1, dimnames = list(NULL, "|change in FFR|"))
+spec_x <- function(vx = NULL) ugarchspec(variance.model = list(model = "eGARCH", garchOrder = c(1, 1), external.regressors = vx),
+                                         mean.model = list(armaOrder = c(1, 0), include.mean = TRUE), distribution.model = "std")
+fx <- list("EGARCH(1,1), no regressor" = ugarchfit(spec_x(), r2, solver = "hybrid"), "FFR level" = ugarchfit(spec_x(X_lvl), r2, solver = "hybrid"),
+           "|Change in FFR|" = ugarchfit(spec_x(X_abs), r2, solver = "hybrid"), "Both" = ugarchfit(spec_x(cbind(X_lvl, X_abs)), r2, solver = "hybrid"))
+ll0 <- likelihood(fx[[1]])
+row <- function(nm) { f <- fx[[nm]]; mc <- f@fit$matcoef; ex <- grep("vxreg", rownames(mc))
+  data.frame(`Variance regressor` = nm, `Log-likelihood` = round(likelihood(f), 1), AIC = round(infocriteria(f)[1], 4), BIC = round(infocriteria(f)[2], 4),
+             `Coefficient (s.e.)` = if (length(ex)) paste(sprintf("%.4f (%.4f)", mc[ex, 1], mc[ex, 2]), collapse = "; ") else "",
+             `LR test p` = if (nm == names(fx)[1]) "" else fmt_p(pchisq(2 * (likelihood(f) - ll0), length(ex), lower.tail = FALSE)), check.names = FALSE) }
+kable(do.call(rbind, lapply(names(fx), row)), row.names = FALSE, caption = "EGARCH(1,1) with Student-t Innovations and Federal Funds Rate Terms in the Variance Equation, 2006–2023")
+b <- coef(fx[["|Change in FFR|"]]); mult <- function(x, k) exp(b["vxreg1"] * x * (1 - b["beta1"]^k) / (1 - b["beta1"]) / 2)
+cat(sprintf("\nIn the |change| model beta = %.4f. A month with a 0.25-point change raises the conditional standard deviation by %.1f%% after 21 trading days; a 0.75-point change by %.1f%%.\n", b["beta1"], 100 * (mult(0.25, 21) - 1), 100 * (mult(0.75, 21) - 1)))
+```
+
+The variance regressors are placed in an `EGARCH(1,1)` rather than the GJR model because `rugarch` constrains a GJR variance regressor to be non-negative, which would rule out a negative effect of the rate level before it was tested; the two models fit equally well on the shorter sample, with log-likelihoods within 0.1. The level of the policy rate adds nothing to the daily variance equation: its coefficient is zero to four decimals. The size of the month's rate change does: its coefficient is 0.023 with a standard error of 0.013, the likelihood-ratio test rejects the model without it at p = 0.012, and AIC falls, though BIC, which penalises the extra parameter more, rises slightly. Because the EGARCH persistence is 0.99, a regressor that stays on for a month compounds: a month in which the rate moved by 0.25 points raises the conditional standard deviation by about 6% over the month, and a 0.75-point month by about 18%; the largest monthly-average changes in 2022 were 0.65 and 0.70 points, since the monthly average smooths the 0.75-point decisions of that year.
+
+```{r fig.width=9, fig.height=5}
+mon <- dd |> group_by(M) |> summarize(ret = sum(r), rv = sqrt(sum(r^2)), ffr = first(ffr), dffr = first(dffr), .groups = "drop")
+mon$absd <- abs(mon$dffr); mon$lrv <- log(mon$rv); mon$lrv_l1 <- dplyr::lag(mon$lrv, 1); mon$dffr_l1 <- dplyr::lag(mon$dffr, 1)
+mon$Type <- factor(ifelse(mon$dffr > 0.05, "Rate raised", ifelse(mon$dffr < -0.05, "Rate cut", "Unchanged")), levels = c("Rate cut", "Unchanged", "Rate raised"))
+gridExtra::grid.arrange(
+  ggplot(mon, aes(M, rv)) + geom_col(aes(fill = Type), width = 25) + scale_fill_manual(values = c("Rate cut" = "firebrick", "Unchanged" = "grey60", "Rate raised" = "steelblue4")) +
+    ggtitle("Monthly Realised Volatility of the Dollar, by Direction of the Month's Policy-Rate Change") + xlab("Year") + ylab("% per month") + theme(legend.position = "top", legend.title = element_blank()),
+  ggplot(mon, aes(M, ffr)) + geom_line() + ggtitle("Effective Federal Funds Rate, Monthly Average") + xlab("Year") + ylab("%"), nrow = 2, heights = c(3, 2))
+```
+
+```{r}
+bt <- mon |> group_by(Type) |> summarize(Months = n(), `Mean RV, %` = round(mean(rv), 3), `Median RV, %` = round(median(rv), 3), `Mean return, %` = round(mean(ret), 3), .groups = "drop")
+kable(bt, row.names = FALSE, caption = "Realised Volatility and Return by Type of Month; a Change of More than 0.05 Points Counts as a Move")
+cat(sprintf("\nCorrelation of monthly realised volatility with the FFR level: %.3f; with the absolute change in the FFR: %.3f. Welch t-test, months with a change against months without: p = %.3f.\n",
+            cor(mon$rv, mon$ffr), cor(mon$rv, mon$absd), t.test(mon$rv[mon$absd > 0], mon$rv[mon$absd == 0])$p.value))
+regs <- list(`log RV on FFR level` = lm(lrv ~ ffr, mon), `log RV on |change|` = lm(lrv ~ absd, mon), `log RV on both` = lm(lrv ~ ffr + absd, mon), `log RV on both and lagged log RV` = lm(lrv ~ lrv_l1 + ffr + absd, mon))
+rt <- do.call(rbind, lapply(names(regs), function(nm) { m <- regs[[nm]]; ct <- lmtest::coeftest(m, vcov = sandwich::NeweyWest(m, lag = 6, prewhite = FALSE))
+  data.frame(Regression = nm, R2 = round(summary(m)$r.squared, 3), `FFR level` = if ("ffr" %in% rownames(ct)) sprintf("%.3f (%.3f), p %s", ct["ffr", 1], ct["ffr", 2], fmt_p(ct["ffr", 4])) else "",
+             `|Change in FFR|` = if ("absd" %in% rownames(ct)) sprintf("%.3f (%.3f), p %s", ct["absd", 1], ct["absd", 2], fmt_p(ct["absd", 4])) else "",
+             `Lagged log RV` = if ("lrv_l1" %in% rownames(ct)) sprintf("%.3f (%.3f), p %s", ct["lrv_l1", 1], ct["lrv_l1", 2], fmt_p(ct["lrv_l1", 4])) else "", check.names = FALSE) }))
+kable(rt, row.names = FALSE, caption = "Monthly Regressions, 212 Months; Newey-West Standard Errors with 6 Lags")
+Yv <- ts(cbind(`log RV` = mon$lrv, `Change in FFR` = mon$dffr), frequency = 12)
+gt <- do.call(rbind, lapply(1:3, function(p) { vf <- VAR(Yv, p = p, type = "const")
+  data.frame(Lags = p, `FFR change causes volatility` = fmt_p(causality(vf, cause = "Change.in.FFR")$Granger$p.value), `Volatility causes FFR change` = fmt_p(causality(vf, cause = "log.RV")$Granger$p.value), check.names = FALSE) }))
+kable(gt, row.names = FALSE, caption = "Granger-Causality p-values, Monthly VAR of log Realised Volatility and the Change in the FFR")
+```
+
+Realised volatility is the square root of the sum of squared daily returns within the month, in %; its mean is 1.45% and its median 1.34%. Three facts stand out. First, volatility is higher in months when the policy rate moves: 1.50% on average in the 160 months with any change against 1.29% in the 52 with none, a difference the t-test puts at p = 0.014, and the correlation with the absolute change is 0.40. Second, the direction matters. Months in which the rate was cut have the highest volatility, 1.91% on average across 20 months, against 1.48% in the 40 months it was raised and 1.38% when it was unchanged. The cuts are concentrated in 2007–2008 and March 2020, the two periods of financial stress in the sample, so this is the Federal Reserve responding to the conditions that also move the dollar rather than the cuts causing the volatility. Cut months also have the highest average dollar return, 0.34%, which is the safe-haven appreciation of those periods. Third, the level of the rate is negatively related to volatility: a rate one point higher is associated with realised volatility 3.5% lower once the month's change and last month's volatility are held fixed, and 8% lower without those controls. The low-rate years include 2008–2009 and 2020, and the high-rate years 2006–2007 and 2023, which were calm.
+
+The regressions confirm that the size of the month's move is the stronger of the two: in the fullest specification a one-point absolute change raises log realised volatility by 0.60, a factor of 1.8, with p below 0.001, alongside a lagged-volatility coefficient of 0.62 that carries the persistence the GARCH model captures at daily frequency. The Granger tests give the direction. The change in the policy rate does not help predict next month's volatility at any lag order, with p-values of 0.39 to 0.74, while volatility does help predict the next change in the rate, with p = 0.002 at two lags and 0.008 at three. The sequence is the same one the vector autoregression on the yield curve found: market conditions lead, the policy rate follows. A month of high dollar volatility is a signal that the Federal Reserve is more likely to move the rate in the following months, in the sample mostly to cut it.
+
+Two qualifications apply. The monthly average rate is not a measure of policy surprises; a rate change that was fully anticipated moves the dollar little on the day it is made, and the measure used here does not distinguish anticipated from unanticipated moves. And the daily-frequency effect, while statistically supported, is modest against the model's own dynamics: a 0.25-point month adds about 6% to the conditional standard deviation, whereas the 2008 crisis tripled it.
+
+## The S&P 500
+
+The same questions are asked of the stock market, using the tools of the course: log returns, the ACF and PACF of the returns and their squares, an `AR(p)`-`ARCH(p)` or `GARCH(1,1)` model estimated with `garchFit` from the `fGarch` package, the standardised-residual tests, and a plot of the conditional variance. The series is `SP500`, the daily closing level of the index, from 23 September 2013 to 20 September 2023, the ten years FRED provides, giving 2,515 daily log returns in %.
+
+### Returns
+
+```{r}
+sp <- na.omit(read_excel("data/data/sp500.xlsx")); sp <- data.frame(Date = as.Date(sp[[1]]), p = as.numeric(sp[[2]]))
+rs <- 100 * diff(log(sp$p)); ds <- sp$Date[-1]; ns <- length(rs)
+gridExtra::grid.arrange(
+  ggplot(sp, aes(Date, p)) + geom_line() + ggtitle("S&P 500, Daily Close") + xlab("Year") + ylab("Index level"),
+  ggplot(data.frame(Date = ds, r = rs), aes(Date, r)) + geom_line() + ggtitle("Daily Log Return") + xlab("Year") + ylab("%"), nrow = 2)
+kable(data.frame(Statistic = c("Observations", "Mean, % per day", "Standard deviation, % per day", "Annualised standard deviation, %", "Excess kurtosis", "Minimum, %", "Maximum, %"),
+                 Value = c(format(ns, big.mark = ","), sprintf("%.4f", mean(rs)), sprintf("%.3f", sd(rs)), sprintf("%.1f", sd(rs) * sqrt(252)), sprintf("%.1f", kurtosis(rs) - 3),
+                           sprintf("%.2f on %s", min(rs), format(ds[which.min(rs)], "%d %b %Y")), sprintf("%.2f on %s", max(rs), format(ds[which.max(rs)], "%d %b %Y")))),
+      row.names = FALSE, caption = "S&P 500 Daily Log Returns, 2013–2023")
+```
+
+```{r fig.width=9, fig.height=6}
+gridExtra::grid.arrange(ggAcf(rs, 40) + ggtitle("ACF, Returns"), ggPacf(rs, 40) + ggtitle("PACF, Returns"),
+                        ggAcf(rs^2, 40) + ggtitle("ACF, Squared Returns"), ggPacf(rs^2, 40) + ggtitle("PACF, Squared Returns"), nrow = 2)
+cat(sprintf("Ljung-Box, returns, lag 10: p %s.   Squared returns, lag 10: p %s.   ARCH-LM test, 12 lags: statistic %.1f, p %s.\n",
+            fmt_p(Box.test(rs, 10, "Ljung-Box")$p.value), fmt_p(Box.test(rs^2, 10, "Ljung-Box")$p.value), ArchTest(rs, 12)$statistic, fmt_p(ArchTest(rs, 12)$p.value)))
+```
+
+The index rose from 1,702 to 4,402 over the decade. The returns have a mean of 0.04% a day and a standard deviation of 1.12%, 17.8% a year, more than three times the dollar's, and excess kurtosis of 16, driven by March 2020: the largest fall, −12.8% on 16 March 2020, and the largest rise, +9.0% on 24 March 2020, are eight days apart. The returns themselves have a small negative autocorrelation at lag one, −0.14, and the squared returns are strongly autocorrelated, 0.49 at lag one and 0.53 at lag two, with the PACF of the squares showing two large spikes and then small values. That pattern, white-noise-like returns with an autoregressive structure in the squares, is the signature of ARCH effects described in the lecture, and the LM test confirms it with a statistic of 986.
+
+### Model
+
+The mean is `AR(1)`, the order `auto.arima` selected for the dollar and adequate here for a lag-one autocorrelation of −0.14. Six variance specifications are estimated by maximum likelihood with normal innovations: `ARCH(1)`, `ARCH(2)` and `ARCH(4)`, which the PACF of the squares suggests, and `GARCH(1,1)`, `GARCH(1,2)` and `GARCH(2,1)`.
+
+```{r}
+orders <- list(c(1, 0), c(2, 0), c(4, 0), c(1, 1), c(1, 2), c(2, 1))
+gfits <- lapply(orders, function(o) garchFit(as.formula(sprintf("~ arma(1,0) + garch(%d,%d)", o[1], o[2])), data = rs, trace = FALSE))
+kable(data.frame(Model = sapply(orders, function(o) if (o[2] == 0) sprintf("AR(1)-ARCH(%d)", o[1]) else sprintf("AR(1)-GARCH(%d,%d)", o[1], o[2])),
+                 Parameters = sapply(gfits, function(f) length(coef(f))), `Log-likelihood` = sapply(gfits, function(f) round(-f@fit$llh, 1)),
+                 AIC = sapply(gfits, function(f) round(f@fit$ics[1], 4)), BIC = sapply(gfits, function(f) round(f@fit$ics[2], 4)), check.names = FALSE),
+      row.names = FALSE, caption = "Variance Specifications for the S&P 500, Normal Innovations; Information Criteria per Observation")
+gs <- gfits[[4]]; mc <- gs@fit$matcoef
+kable(data.frame(Coefficient = rownames(mc), Estimate = round(mc[, 1], 4), `Std. Error` = round(mc[, 2], 4), t = round(mc[, 3], 2), p = formatC(mc[, 4], format = "f", digits = 4), check.names = FALSE),
+      row.names = FALSE, caption = "AR(1)-GARCH(1,1), Normal Innovations")
+zs <- as.numeric(residuals(gs, standardize = TRUE))
+kable(data.frame(Test = c("Jarque-Bera, R", "Ljung-Box, R, Q(10)", "Ljung-Box, R, Q(20)", "Ljung-Box, R², Q(10)", "Ljung-Box, R², Q(20)", "LM ARCH, 12 lags"),
+                 Statistic = round(c(jarque.bera.test(zs)$statistic, Box.test(zs, 10, "Ljung-Box")$statistic, Box.test(zs, 20, "Ljung-Box")$statistic, Box.test(zs^2, 10, "Ljung-Box")$statistic, Box.test(zs^2, 20, "Ljung-Box")$statistic, ArchTest(zs, 12)$statistic), 2),
+                 `p-value` = fmt_p(c(jarque.bera.test(zs)$p.value, Box.test(zs, 10, "Ljung-Box")$p.value, Box.test(zs, 20, "Ljung-Box")$p.value, Box.test(zs^2, 10, "Ljung-Box")$p.value, Box.test(zs^2, 20, "Ljung-Box")$p.value, ArchTest(zs, 12)$p.value)), check.names = FALSE),
+      row.names = FALSE, caption = "Standardised Residual Tests, AR(1)-GARCH(1,1)")
+gt <- garchFit(~ arma(1,0) + garch(1,1), data = rs, trace = FALSE, cond.dist = "std")
+cat(sprintf("With Student-t innovations: AIC %.4f, BIC %.4f, estimated degrees of freedom %.1f.\n", gt@fit$ics[1], gt@fit$ics[2], coef(gt)["shape"]))
+```
+
+Each additional ARCH lag improves the fit, from `ARCH(1)` to `ARCH(4)` the log-likelihood rises by 258, and `GARCH(1,1)` improves on `ARCH(4)` by a further 40 points with two fewer parameters, because its lagged-variance term stands in for a long series of ARCH lags. Adding a second ARCH or GARCH term changes the likelihood by less than a point. `AR(1)-GARCH(1,1)` is retained. All five coefficients are significant. The model is
+
+$$r_t = 0.083 - 0.069\, r_{t-1} + y_t, \qquad y_t = \sigma_t \varepsilon_t, \qquad \sigma_t^2 = 0.039 + 0.203\, y_{t-1}^2 + 0.769\, \sigma_{t-1}^2.$$
+
+The standardised residuals pass the Ljung-Box tests on R and R² and the LM ARCH test: the model has removed the autocorrelation in the squares. They fail the Jarque-Bera test, as in the lecture's GNP example, because the innovations have heavier tails than the normal distribution; re-estimating with Student-t innovations lowers the AIC and puts the degrees of freedom at 5.6, without changing the variance coefficients materially. Persistence, $\alpha_1 + \beta_1$, is 0.971, lower than the dollar's 0.996: a shock to stock-market volatility decays with a half-life of 24 trading days, against 155 for the dollar. The ARCH coefficient of 0.20 is three and a half times the dollar's, so the S&P responds to a single day's shock much more sharply and forgets it much faster.
+
+### Conditional Volatility
+
+```{r fig.width=9, fig.height=4.5}
+sigs <- data.frame(Date = ds, sigma = as.numeric(gs@sigma.t))
+ev2 <- data.frame(start = as.Date(c("2015-08-15", "2018-02-01", "2018-12-01", "2020-02-01", "2022-03-01")), end = as.Date(c("2015-09-30", "2018-02-28", "2018-12-31", "2020-04-30", "2023-08-31")),
+                  label = c("China devaluation", "Feb 2018", "Dec 2018", "Pandemic", "Fed tightening"))
+ggplot() + geom_rect(data = ev2, aes(xmin = start, xmax = end, ymin = -Inf, ymax = Inf), fill = "grey85") +
+  geom_line(data = sigs, aes(Date, sigma)) + geom_text(data = ev2, aes(x = start + (end - start) / 2, y = c(7.6, 7.0, 6.4, 7.6, 7.6), label = label), size = 3, vjust = 1) +
+  ggtitle("Conditional Standard Deviation of Daily S&P 500 Returns, AR(1)-GARCH(1,1)") + xlab("Year") + ylab("% per day")
+ev2$`Mean σ, %` <- NA; ev2$`Peak σ, %` <- NA; ev2$`Peak date` <- NA
+for (i in seq_len(nrow(ev2))) { w <- sigs$Date >= ev2$start[i] & sigs$Date <= ev2$end[i]; ev2$`Mean σ, %`[i] <- round(mean(sigs$sigma[w]), 2); ev2$`Peak σ, %`[i] <- round(max(sigs$sigma[w]), 2); ev2$`Peak date`[i] <- format(sigs$Date[w][which.max(sigs$sigma[w])], "%d %b %Y") }
+ev2$Period <- paste(format(ev2$start, "%b %Y"), "to", format(ev2$end, "%b %Y"))
+kable(ev2[, c("label", "Period", "Mean σ, %", "Peak σ, %", "Peak date")], col.names = c("Episode", "Period", "Mean σ, %", "Peak σ, %", "Peak date"), row.names = FALSE,
+      caption = sprintf("Conditional Volatility in Five Episodes; Full-Sample Median %.2f%%", median(sigs$sigma)))
+```
+
+The conditional standard deviation has a median of 0.79% a day. Its peak, 7.9% on 17 March 2020, is ten times the median; the dollar's 2008 peak was three times its median. The pandemic dominates the decade, with the episode averaging 3.0% a day. The other spikes are the August 2015 devaluation of the Chinese yuan, the volatility spike of February 2018, the December 2018 sell-off, and the 2022 tightening, in which volatility averaged 1.2% and peaked at 2.7% in November 2022. Between the episodes the S&P spent 2017 at the lowest volatility in the sample, 0.43% a day in October 2017.
+
+### The Federal Funds Rate
+
+```{r fig.width=9, fig.height=3.5}
+dsp <- data.frame(Date = ds, r = rs, M = floor_date(ds, "month")) |> inner_join(ff, by = "M")
+msp <- dsp |> group_by(M) |> summarize(rv = sqrt(sum(r^2)), ffr = first(ffr), dffr = first(dffr), .groups = "drop")
+msp$Type <- factor(ifelse(msp$dffr > 0.05, "Rate raised", ifelse(msp$dffr < -0.05, "Rate cut", "Unchanged")), levels = c("Rate cut", "Unchanged", "Rate raised"))
+ggplot(msp, aes(M, rv)) + geom_col(aes(fill = Type), width = 25) + scale_fill_manual(values = c("Rate cut" = "firebrick", "Unchanged" = "grey60", "Rate raised" = "steelblue4")) +
+  ggtitle("Monthly Realised Volatility of the S&P 500, by Direction of the Month's Policy-Rate Change") + xlab("Year") + ylab("% per month") + theme(legend.position = "top", legend.title = element_blank())
+kable(msp |> group_by(Type) |> summarize(Months = n(), `Mean RV, %` = round(mean(rv), 2), `Median RV, %` = round(median(rv), 2), .groups = "drop"), row.names = FALSE,
+      caption = "S&P 500 Realised Volatility by Type of Month, 2013–2023")
+m_sp <- lm(log(rv) ~ abs(dffr) + ffr, data = msp); cs <- summary(m_sp)$coefficients
+cat(sprintf("Correlation of monthly realised volatility with |change in FFR|: %.3f; with the FFR level: %.3f.  Welch t-test, months with a change against months without: p = %.3f.\n", cor(msp$rv, abs(msp$dffr)), cor(msp$rv, msp$ffr), t.test(msp$rv[msp$dffr != 0], msp$rv[msp$dffr == 0])$p.value))
+cat(sprintf("Regression of log RV on |change in FFR| and FFR level, %d months, R² = %.2f: |change| %.2f (s.e. %.2f, p %s); level %.3f (s.e. %.3f, p %s).\n", nrow(msp), summary(m_sp)$r.squared, cs[2, 1], cs[2, 2], fmt_p(cs[2, 4]), cs[3, 1], cs[3, 2], fmt_p(cs[3, 4])))
+```
+
+The relationship found for the dollar holds for the stock market and is stronger. Over the 120 months from October 2013 to August 2023, monthly realised volatility averages 3.6% in the 81 months the policy rate was unchanged, 4.9% in the 33 months it was raised and 9.0% in the six months it was cut; the cuts are the 2019 easing and March–April 2020. The correlation between realised volatility and the size of the month's rate change is 0.65, against 0.40 for the dollar, and in the regression a one-point change is associated with log volatility 1.86 higher, a factor of 6.4, with p below 0.001, while the level of the rate has no significant effect. The stock market, like the dollar, is most volatile in the months the Federal Reserve moves, and most of all when it cuts, because the cuts come in the episodes of financial stress that also drive equity volatility.
+
+## Summary
+
+```{r}
+kable(data.frame(
+  Item = c("Series", "Mean equation", "Variance equation", "Innovation distribution", "Persistence", "Asymmetry", "Residual tests", "Out-of-sample rank", "VaR coverage", "Federal Funds Rate", "S&P 500"),
+  Result = c("Daily log returns on the broad dollar index, %, 2006–2023, 4,487 observations",
+             "AR(1), coefficient 0.039", "GJR-GARCH(1,1): ω = 0.0005, α = 0.058, γ = −0.036, β = 0.956",
+             "Student-t, 7.6 degrees of freedom", "0.9955; half-life 155 trading days",
+             "Dollar appreciations add 0.058 × ε² to variance, depreciations 0.022 × ε²",
+             "No autocorrelation in z or z², no remaining ARCH effect, no sign bias",
+             "Lowest MSE and QLIKE of six methods over 1,346 days", "1% and 5% exceedance rates as expected",
+             "|Change in FFR| significant in the variance equation (LR p = 0.012); level not; volatility Granger-causes FFR changes, not the reverse",
+             "AR(1)-GARCH(1,1) normal: α = 0.203, β = 0.769, persistence 0.971; residual tests pass; monthly RV correlation 0.65 with |ΔFFR|")),
+  row.names = FALSE, caption = "Retained Model")
+```
+
+### What the Model Found
+
+Dollar returns are unpredictable in sign and predictable in size. The mean equation explains almost nothing, an autocorrelation of 0.04, while the variance equation is strongly supported: an ARCH-LM statistic of 548 in the raw returns and none in the model's residuals. The variance is persistent, with a coefficient on lagged variance of 0.956 and a half-life of half a trading year, and heavy-tailed, with innovations that follow a t-distribution with about 7.6 degrees of freedom. The two additions to a basic `GARCH(1,1)` that the data support are the heavy-tailed distribution, worth 93 log-likelihood points, and asymmetry, worth 10. The asymmetry runs opposite to the leverage effect in equities: rises in the dollar raise its volatility more than falls do, which is consistent with the dollar strengthening during flights to safety.
+
+The volatility path reproduces the episodes documented elsewhere on this site. The financial crisis of 2008 produced a peak three times the median and the highest readings in the sample; the pandemic produced the second-highest; the euro-area crisis, the Brexit vote and the 2022–2023 tightening each produced peaks of about 0.5 to 0.57% a day. Between 2012 and 2019 the dollar was quiet.
+
+### Forecasting
+
+The model's advantage over simpler methods is real but modest. Over the last 1,346 days its one-day variance forecasts beat the RiskMetrics EWMA by 0.02 on QLIKE and a 22-day rolling variance by 0.06, and its value-at-risk quantiles are exceeded at the right frequency. A practitioner who needs a daily volatility estimate for the dollar would lose little with the EWMA and would lose noticeably with a constant variance. The 60-day forecast is a slow drift from 0.32% to 0.33% a day; GARCH forecasts are informative about the level of volatility over the next few weeks and, beyond the half-life, converge to the unconditional level.
+
+### The S&P 500
+
+The stock market shows the same structure with larger numbers. An `AR(1)-GARCH(1,1)` model estimated with `fGarch` passes the Ljung-Box and LM ARCH tests on its standardised residuals; its ARCH coefficient is 0.20 and its persistence 0.97, so equity volatility reacts to a shock three and a half times as strongly as the dollar's and forgets it six times as fast, with a half-life of 24 days. The March 2020 peak, 7.9% a day, is ten times the median. Monthly equity volatility is 0.65 correlated with the size of the month's policy-rate change, 35% higher in months the rate is raised and two and a half times higher in months it is cut.
+
+### The Federal Funds Rate
+
+The policy rate enters the dollar's volatility through the size of its moves, not its level. At daily frequency the absolute change in the month's rate is a significant variance regressor (likelihood-ratio p = 0.012), raising the conditional standard deviation by about 6% in a month with a 0.25-point move; the rate level has a coefficient of zero. At monthly frequency realised volatility is 16% higher in months the rate changes than in months it does not, 48% higher in months it is cut, and a one-point move is associated with volatility 1.8 times higher after controlling for the previous month. The timing is the same as in the yield-curve VAR: dollar volatility Granger-causes changes in the policy rate (p = 0.002), and changes in the policy rate do not Granger-cause dollar volatility. The Federal Reserve moves the rate in the months after the dollar market has become volatile, in this sample most often by cutting into a period of stress, and the moves themselves add a modest amount to volatility while they are being made. A test with a daily measure of policy surprises, which this data set does not contain, would separate the two more sharply.
+
+### Limitations
+
+The squared return is a noisy proxy for the variance, and the out-of-sample comparison inherits that noise; realised variance from intraday data would give sharper rankings. The sample contains two regime changes, the 2008 crisis and the 2020 pandemic, and a model with constant parameters fitted across both estimates an average of their dynamics; the rolling re-estimation in the out-of-sample exercise partly addresses this. The Student-t distribution is symmetric, and the skewed-t did not improve on it, so the asymmetry in the data is carried entirely by the variance equation. The mean equation's residuals retain small autocorrelations at lags 8 to 20 which are not modelled. The policy-rate variable is a monthly average assigned to every day of its month, so the daily variance regressor is a step function and the monthly analysis cannot distinguish a rate change made at the start of a month from one made at the end.

@@ -9,6 +9,8 @@ website:
     style: "floating"
     search: true
     tools:
+      - icon: house-door-fill
+        href: https://elliotzli.com/
       - icon: github
         href: https://github.com/elliotzli/dsan5600_finalproject
       - icon: linkedin

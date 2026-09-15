@@ -1,0 +1,42 @@
+
+/* Mermaid diagrams are pre-rendered to PNG at a large fig-width for the
+   lightbox; scale the inline copy down to the column it sits in. */
+.quarto-figure img.figure-img,
+figure.figure img.figure-img {
+  max-width: 100%;
+  height: auto !important;
+}
+
+/* Legend under the transmission-map figure */
+.diagram-legend {
+  font-size: 0.9rem;
+  color: #555;
+  max-width: 48rem;
+  margin: -0.5rem auto 2rem auto;
+}
+.diagram-legend ul { list-style: none; padding-left: 0; }
+.diagram-legend li { margin-bottom: 0.25rem; }
+.swatch {
+  display: inline-block;
+  width: 0.9em; height: 0.9em;
+  margin-right: 0.4em;
+  vertical-align: -0.1em;
+  border-radius: 2px;
+  border: 1px solid;
+}
+.swatch.sw-policy { background: #e2e3e5; border-color: #495057; }
+.swatch.sw-market { background: #dbe9f6; border-color: #1f5f99; }
+.swatch.sw-lead   { background: #d4edda; border-color: #28a745; }
+.swatch.sw-coin   { background: #fff3cd; border-color: #d39e00; }
+.swatch.sw-lag    { background: #f8d7da; border-color: #dc3545; }
+
+/* Transmission-map figure: narrower than the body column, centred */
+.transmission-map figure.figure { text-align: center; }
+.transmission-map img.figure-img {
+  max-width: 72%;
+  height: auto !important;
+  display: inline-block;
+}
+@media (max-width: 991px) {
+  .transmission-map img.figure-img { max-width: 100%; }
+}

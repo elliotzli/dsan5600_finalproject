@@ -1,44 +1,29 @@
 ---
 title: "Data Visualization"
 subtitle: "Treasury Yield Movement and Its Relations to the Economy"
+date: "2023-12-3"
+date-modified: today
+date-format: long
 format: 
   html:
     smooth-scroll: true
     toc: true
     code-fold: true
     code-tools: true
-    embed-resources: false
-    mermaid:
-      theme: neutral
+    lightbox: true
+    embed-resources: true
 bibliography: citation.bib
 execute: 
   echo: false
   warning: false
 ---
-## Short-Term Treasury Bill Movements and Federal Funds Rate Spreads
 
-The Treasury yield minus the Federal Funds Rate essentially reflects the spread or differential between the two, which can signal several economic conditions and expectations.
+***
+### Short-Term Spreads
 
-1. Monetary Policy and Economic Cycles Insight:
-    i) Interest Rate Expectations: A larger spread between Treasury yields and the Federal Funds Rate could indicate that investors expect interest rates to rise in the future, possibly due to economic growth or inflation expectations.
-    ii) Economic Health: A narrowing spread might suggest that investors are seeking safe-haven assets, which could imply economic uncertainty or an impending recession.
+The three series in this section are spreads: the 3-month, 6-month, and 1-year Treasury yields minus the effective Federal Funds Rate on the same day, in % points. The Federal Funds Rate is the rate the Fed controls. A Treasury bill yield is the rate the market sets for lending to the government over the same horizon. The difference between them is a direct reading of where the market expects policy to go.
 
-2. Risk and Investment Dynamics:
-    i) Risk Sentiment: A widening spread might indicate a risk-on environment where investors are favoring higher-yielding assets, whereas a narrowing spread might suggest risk-aversion.
-    ii) Investment Strategy: Differentials in Treasury yields can influence asset allocation and investment strategies, particularly in fixed-income portfolios.
-
-3. International Capital Flows:
-    i) Attractiveness to Foreign Investors: Larger spreads between U.S. Treasury yields and the Federal Funds Rate compared to foreign bond yields might attract international capital, influencing currency value and global fund flows.
-    ii) Global Comparative Advantage: Evaluate how the spreads compare with the interest rate differentials of other countries, which might impact international investment decisions.
-
-4. Inflation and Real Yield Perspectives:
-    i) Inflation Expectations: Higher Treasury yields (relative to the Federal Funds Rate) might be associated with higher future inflation expectations, as investors might demand higher nominal yields.
-    ii) Real Yields: Analyzing these spreads alongside inflation metrics allows for evaluating real yield dynamics and their implications for savers and investors.
-
-5. Fiscal and Monetary Policy Interactions:
-    i)Policy Efficiency: Understanding how fiscal policies (like government borrowing, reflected in Treasury yields) interact with monetary policy (indicated by the Federal Funds Rate) can provide insights into the overall policy environment and effectiveness.
-
-@tbill_ffr
+A bill yield below the Federal Funds Rate means investors accept less than the current policy rate to lock in a return for the next few months, which they do when they expect the Fed to cut. A bill yield above it means they demand more, which they do when they expect the Fed to raise. The spread turns negative before easing cycles and positive before tightening cycles. The 1-year spread moves first and furthest, since it has the most room to price in future changes.
 
 ```{python}
 import plotly.graph_objects as go
@@ -48,187 +33,117 @@ import warnings
 
 warnings.filterwarnings("ignore")
 pio.renderers.default = "plotly_mimetype+notebook_connected"
+
 df = pd.read_excel('data/data/sr_t-bill-rates.xlsx')
 df.ffill(inplace=True)
+series = list(df.columns[1:])
+
 fig = go.Figure()
-for col in df.columns[1:]:
-    fig.add_trace(go.Scatter(x=df['observation_date'], y=df[col], name=col, visible=True, line=dict(width=1)))
+for col in series:
+    fig.add_trace(go.Scatter(x=df['observation_date'], y=df[col], name=col,
+                             visible=True, line=dict(width=1)))
+
 buttons = [
-    dict(label='All',
-         method='update',
-         args=[{'visible': [True for col in df.columns[1:]]}]),
-    dict(label='None',
-         method='update',
-         args=[{'visible': [False for col in df.columns[1:]]}])
+    dict(label='All',  method='update', args=[{'visible': [True] * len(series)}]),
+    dict(label='None', method='update', args=[{'visible': [False] * len(series)}]),
 ]
-for col in df.columns[1:]:
-    buttons.append(
-        dict(label=col,
-             method='update',
-             args=[{'visible': [True if c == col else False for c in df.columns[1:]]}])
-    )
+for col in series:
+    buttons.append(dict(label=col, method='update',
+                        args=[{'visible': [c == col for c in series]}]))
+
 fig.update_layout(
-    updatemenus=[
-        dict(
-            buttons=buttons,
-            direction="down",
-            active=0,
-            x=1.13,
-            y=0.68,
-        ),
-    ],
-    xaxis=dict(
-        rangeslider=dict(visible=True),
-        type="date"
-    ),
-    title_text="Treasury Bill Constant Maturity Minus Federal Funds Rate <br><sup>reflect the difference between various Treasury Bill yields and the Federal Funds Rate</sup> ",
+    updatemenus=[dict(buttons=buttons, direction="down", active=0, x=1.13, y=0.68)],
+    xaxis=dict(rangeslider=dict(visible=True), type="date"),
+    title_text="Treasury Yield Minus Federal Funds Rate<br><sup>3-month, 6-month, and 1-year constant-maturity yields less the effective Federal Funds Rate, daily, 1982–2023</sup>",
     xaxis_title="Date",
-    yaxis_title="Treasury Yield Rates",
-    width=900,
-    height=600,  
-    margin=dict(t=100),
+    yaxis_title="Spread (% points)",
+    width=900, height=600, margin=dict(t=100),
     plot_bgcolor='white',
-    yaxis_range=[-6,5]
+    yaxis_range=[-6, 5],
 )
+fig.add_hline(y=0, line_width=1, line_color="grey")
 fig.update_xaxes(gridcolor='lightgrey', griddash='dot')
 fig.update_yaxes(gridcolor='lightgrey', griddash='dot')
-
-note = 'Source:<a href="https://fred.stlouisfed.org/"">Federal Reserve Economic Data</a>'
-fig.add_annotation(
-    showarrow=False,
-    text=note,
-    font=dict(size=10), 
-    xref='x domain',
-    x=1.1,
-    yref='y domain',
-    y=-0.5
-    )
 fig.show()
 ```
 
-- T3MFF: 3-Month Treasury Constant Maturity Minus Federal Funds Rate
-- T6MFF: 6-Month Treasury Constant Maturity Minus Federal Funds Rate
-- T1YFF: 1-Year Treasury Constant Maturity Minus Federal Funds Rate
+1) The three lines keep their order. Over 1982–2023 the 3-month spread averages −0.21 points, the 6-month −0.03, and the 1-year +0.13. The 3-month bill usually yields slightly less than the Federal Funds Rate because it is the safest and most liquid instrument in the market, while a Federal Funds loan is an unsecured overnight loan between banks. The 1-year sits above because it carries a year of expected rate changes and a small term premium.
 
-<br>
-The graph clearly shows a strong link between the 3-month, 6-month, and 1-year Treasury bill yield differences. Simply, the 3-month bill has the lowest rate, the 6-month bill is in the middle, and the 1-year bill shows the highest rate difference.
+2) The spread turns negative ahead of each easing cycle. Sustained negative readings appear in 1988–90 before the 1990 recession, through 1997–98 during the Asian and Russian crises, in 2000–01 before the dot-com recession, from mid-2006 through 2008 before and during the financial crisis, in mid-2019 before the Fed's first cuts since 2008, and briefly in March 2020 at the onset of the pandemic. Sustained positive readings are rarer, since the 3-month bill normally sits below the policy rate. They appear in 2018 and through 2022, when the market priced in the Fed's hiking cycles. From 2009 to 2015 the 3-month spread stays within two tenths of a point of zero, since both the bill yield and the Federal Funds Rate were held near zero, while the 6-month and 1-year spreads drift above it as the market priced in an eventual lift-off.
 
-Looking at the timeline, there's a noticeable bumpy ride from 1982 to 2000. When financial crises hit, like the Asian Financial Crisis in 1997, the Global Financial Crisis in 2008, and the onset of Covid-19 in 2020, the gap between the Treasury bill yields and the Federal Funds Rate (FFR) turns negative. This means the bill's yield is lower than the FFR. When the gap is positive, the situation reverses. Here’s why this happens:
+3) The largest readings are artifacts. On the last trading day of 1985 and 1986 the effective Federal Funds Rate spiked as banks bid for reserves over the year-end, pushing the 3-month spread to −6 and −10 points for a day or two. The vertical axis is clipped at −6 so that these two days do not compress the rest of the series. The range slider below the chart can be used to zoom in on any period.
 
-1. Investor Sentiment: In shaky economic times, investors often buy safe assets like Treasury bills, which raises their price but lowers their yield.
+### Long-Maturity Yields and the Mortgage Rate
 
-2. Monetary Policy: If the FFR is higher than T-Bill rates, it might point to the Federal Reserve using a tight monetary policy.
-
-3. Economic Signs: In the past, when short-term rates dip below long-term rates or when the Treasury yield is less than the FFR, it has sometimes signaled a coming recession.
-
-4. Global Investment: During global economic ups and downs, investors from other countries might invest in US Treasury bills even if the yields are low.
-
-## Relationship Between Treasury Yields and Key Economic Indicators
-
-1. CPI (Inflation)
-    i) Risk Management: Unveils how inflation impacts the real yield, guiding investors towards strategies that safeguard purchasing power.
-    ii) Policy Insights: Illuminates possible central bank policy shifts in response to inflation, indirectly shaping bond markets.
-
-2. GDP
-    i) Economic Health Indicator: The relationship may signal the overall economic condition and its likely trajectory.
-    ii) Policy Prediction: Helps anticipate potential monetary policy responses to economic developments.
-
-3. Mortgage Rates
-    i) Housing Market Influence: Relationship analysis aids in forecasting mortgage rate trends, influencing real estate markets.
-    ii) Economic Impact Insight: Highlights broader economic outcomes since housing markets significantly impact the economy.
-
-4. Unemployment Rate
-    i) Economic Insight: Offers a glimpse into economic cycles through the lens of employment and bond yields.
-    ii) Predictive Information: Might provide clues about forthcoming monetary policy adjustments.
-
-5. Federal Funds Rate
-    i) Monetary Policy Impact: A deeper understanding of how federal rate changes percolate through the bond market.
-    ii) Economic Indicator: An indirect showcase of the monetary policy’s effect on economic actions and conditions.
-
-6. Stock Market Indices (e.g., S&P 500)
-    i) Risk Appetite Insight: Indicates shifts in investor sentiment through convergence or divergence between markets.
-    ii) Asset Allocation: Facilitates informed decision-making regarding distribution of investments between bonds and equities.
-
-7. Currency Value (e.g., USD Index)
-    i) Global Investment Strategy: Helps strategize global investments by understanding correlations between bond yields and currency values.
-    ii) Trade and Economic Impact: Elucidates potential cascading effects on trade and the economy spurred by currency value fluctuations.
-
-@imf
+The long end of the curve is shown as yields, not spreads. The 10-year, 20-year, and 30-year constant-maturity yields are plotted with the 30-year fixed mortgage rate, all in %. The 20-year line breaks between 1987 and 1993, the years in which the Treasury did not publish a 20-year constant-maturity yield.
 
 ```{python}
-import plotly.graph_objects as go
-import plotly.io as pio
-import pandas as pd
-import warnings
-
-warnings.filterwarnings("ignore")
-pio.renderers.default = "plotly_mimetype+notebook_connected"
 df = pd.read_excel('data/data/t-bill-vs-econ-index.xlsx')
-df.ffill(inplace=True)
-for col in ['DGS10', 'DGS20', 'DGS30', 'MORTGAGE30']:
-    df[col] = (df[col] - df[col].mean()) / df[col].std()
+# fill holidays and the days between weekly mortgage prints, but leave real gaps open
+df = df.ffill(limit=5)
 
+long_end = ['DGS10', 'DGS20', 'DGS30', 'MORTGAGE30']
 fig1 = go.Figure()
-
-for col in ['DGS10', 'DGS20', 'DGS30', 'MORTGAGE30']:
+for col in long_end:
     fig1.add_trace(go.Scatter(x=df['observation_date'], y=df[col], name=col, line=dict(width=1)))
 
 fig1.update_layout(
     xaxis=dict(rangeslider=dict(visible=True), type="date"),
-    title_text="US Treasury Bond Yields Over Time<br><sup>compare the movement of long term Treasury Bill Yields</sup>",
+    title_text="Long-Maturity Treasury Yields and the 30-Year Mortgage Rate<br><sup>10-, 20-, and 30-year constant-maturity yields with the 30-year fixed mortgage rate, %, 1962–2023</sup>",
     xaxis_title="Date",
-    yaxis_title="Standardized Rates",
-    width=900,
-    height=600,
-    margin=dict(t=100),
+    yaxis_title="Yield (%)",
+    width=900, height=600, margin=dict(t=100),
     plot_bgcolor='white',
 )
-
 fig1.update_xaxes(gridcolor='lightgrey', griddash='dot')
 fig1.update_yaxes(gridcolor='lightgrey', griddash='dot')
-
-note = 'Source:<a href="https://fred.stlouisfed.org/"">Federal Reserve Economic Data</a>'
-fig1.add_annotation(
-    showarrow=False,
-    text=note,
-    font=dict(size=10), 
-    xref='x domain',
-    x=1.2,
-    yref='y domain',
-    y=-0.5
-    )
-
 fig1.show()
+```
 
-for col in ['MORTGAGE30', 'CPI', 'FEDFUNDS', 'USDIDX', 'GDP', 'UER']:
-    df[col] = (df[col] - df[col].mean()) / df[col].std()
+The four lines are close to a single line. Pairwise correlations between the three Treasury yields and the mortgage rate are all above 0.97. The 10-year yield peaked at 15.8% in September 1981, fell for four decades to a low of 0.5% in August 2020, and rose to 4.8% by October 2023. The mortgage rate follows the 10-year yield with an average gap of 1.7 % points, which is the lender's compensation for prepayment risk and servicing. The gap widens when rates are volatile, as in 2008 and 2022, and narrows when they are stable.
+
+### Rates and the Economy
+
+The last chart places the Federal Funds Rate and the mortgage rate alongside four measures of the economy. CPI and real GDP are levels that rise through the whole sample, so they are shown as year-over-year % changes: inflation and growth. The dollar index is shown the same way, as its year-over-year change, using the series that begins in 2006. The unemployment rate is used as published. Every line is then in % and shares one axis.
+
+```{python}
+cpi = pd.read_excel('data/data/cpi-u.xlsx').set_index('observation_date')['CPIAUCSL']
+gdp = pd.read_excel('data/data/GDP.xlsx').set_index('observation_date')['GDPC1']
+usd = pd.read_excel('data/data/usd.xlsx').set_index('DATE')['DTWEXBGS'].dropna()
+usd = usd.reindex(pd.date_range(usd.index.min(), usd.index.max(), freq='D')).ffill()
+
+raw = pd.read_excel('data/data/t-bill-vs-econ-index.xlsx').set_index('observation_date')
+cal = raw.index
+econ = pd.DataFrame({
+    'Fed Funds Rate':           raw['FEDFUNDS'].ffill(),
+    '30Y Mortgage Rate':        raw['MORTGAGE30'].ffill(),
+    'Unemployment Rate':        raw['UER'].ffill(),
+    'CPI Inflation, YoY':       (cpi.pct_change(12) * 100).reindex(cal, method='ffill'),
+    'Real GDP Growth, YoY':     (gdp.pct_change(4) * 100).reindex(cal, method='ffill'),
+    'Dollar Index, YoY change': ((usd / usd.shift(365) - 1) * 100).reindex(cal),
+})
 
 fig2 = go.Figure()
-for col in ['MORTGAGE30', 'CPI', 'FEDFUNDS', 'USDIDX', 'GDP', 'UER']:
-    fig2.add_trace(go.Scatter(x=df['observation_date'], y=df[col], name=col, line=dict(width=1)))
+for col in econ.columns:
+    fig2.add_trace(go.Scatter(x=econ.index, y=econ[col], name=col, line=dict(width=1)))
 
 fig2.update_layout(
     xaxis=dict(rangeslider=dict(visible=True), type="date"),
-    title_text="Economic Measures Over Time<br><sup>compare the movement of 30 year mortgage rate and its influence on major economic indicators</sup>",
+    title_text="Policy Rates, Inflation, Growth, and Unemployment<br><sup>Federal Funds Rate, 30-year mortgage rate, unemployment, CPI inflation, real GDP growth, and dollar index change, %, 1962–2023</sup>",
     xaxis_title="Date",
-    yaxis_title="Standardized Rates",
-    width=900,
-    height=600,
-    margin=dict(t=100),
+    yaxis_title="Rate or change (%)",
+    width=900, height=600, margin=dict(t=100),
     plot_bgcolor='white',
 )
-
+fig2.add_hline(y=0, line_width=1, line_color="grey")
 fig2.update_xaxes(gridcolor='lightgrey', griddash='dot')
 fig2.update_yaxes(gridcolor='lightgrey', griddash='dot')
-note = 'Source:<a href="https://fred.stlouisfed.org/"">Federal Reserve Economic Data</a>'
-fig2.add_annotation(
-    showarrow=False,
-    text=note,
-    font=dict(size=10), 
-    xref='x domain',
-    x=1.2,
-    yref='y domain',
-    y=-0.5
-    )
-fig2.show()  
+fig2.show()
 ```
+
+
+1) The inflation of the 1970s and its end. Inflation reached 12.2% in November 1974 and 14.6% in March 1980. The Fed's response under Paul Volcker took the Federal Funds Rate to 19.1% in June 1981, more than nine points above inflation and the highest real policy rate in the sample. The mortgage rate followed to 18.6% that October. Inflation was below 4% by the end of 1982 and stayed low for four decades. The cost was two recessions and an unemployment rate of 10.8% in November 1982.
+
+2) The shape of every cycle since. The Federal Funds Rate rises during an expansion, unemployment falls, and growth runs between 2 and 4% in most quarters. The Fed cuts as growth slows, and unemployment rises after the cuts begin: 7.8% in 1992, 6.3% in 2003, and 10.0% in 2009. The 2008 recession is the one case where inflation turned negative, at −2.0% in July 2009, and the Federal Funds Rate was then held near zero for seven years. The dollar index rose 21.7% year over year in March 2009 as investors moved into dollars during the crisis, which shows that the dollar responds to risk as well as to rate differentials.
+
+3) The pandemic. Real GDP fell 7.5% year over year in the second quarter of 2020 and rose 12.0% a year later, the largest swings in the sample, and unemployment jumped to 14.7% in April 2020. Inflation followed, reaching 8.9% in June 2022 while the Federal Funds Rate was still 0.2%, a real policy rate of −8.3 points in March 2022 and the lowest in the sample. The Fed raised the rate above 5% within sixteen months. The dollar index rose 12.9% year over year in October 2022 as U.S. rates climbed faster than rates abroad, the rate-differential channel from the introduction.

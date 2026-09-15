@@ -1,450 +1,235 @@
 ---
 title: "Deep Learning for Time Series"
-subtitle: "Comparative Analysis of Deep Learning (GRU, LSTM, RNN) and Traditional Time Series Models"
-format: 
+subtitle: "Recurrent Networks against ARIMA on Consumer Sentiment, with and without the Federal Funds Rate"
+date: "2023-12-3"
+date-modified: today
+date-format: long
+format:
   html:
     smooth-scroll: true
     toc: true
     code-fold: true
     code-tools: true
-    embed-resources: false
-    mermaid:
-      theme: neutral
+    lightbox: true
+    embed-resources: true
 bibliography: citation.bib
-execute: 
+execute:
   echo: false
   warning: false
+  message: false
 ---
 
-In my study, I apply deep learning models to analyze consumer sentiment from 1978 to 2023. This period covers a range of significant economic changes and technological advancements, which greatly affect consumer behavior. By using advanced deep learning techniques, such as LSTM, RNN, and GRU, which are known for their effectiveness in handling time-series data, we aim to uncover how consumer sentiment has changed over these decades. Our goal is to provide valuable insights for economists, policymakers, and businesses. This analysis is not just academically relevant; it's crucial for understanding consumer trends and making informed decisions in various sectors.
-
-```{python}
-import numpy as np
-import matplotlib.pyplot as plt
-import seaborn as sns
-import plotly.express as px
-import plotly.io as pio
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
-import pandas as pd 
-from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolute_percentage_error
+```{python setup}
+import os, warnings; os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"; warnings.filterwarnings("ignore")
+import numpy as np, pandas as pd, matplotlib.pyplot as plt, tensorflow as tf
 from tensorflow import keras
-from tensorflow.keras import layers, initializers, regularizers
-from keras.layers import Dense, SimpleRNN, LSTM, GRU
 from keras.models import Sequential
-from keras.optimizers import RMSprop
+from keras.layers import Dense, SimpleRNN, LSTM, GRU
 from keras.callbacks import EarlyStopping
+from statsmodels.tsa.arima.model import ARIMA
+from statsmodels.tsa.stattools import adfuller, acf, pacf
+from scipy import stats
+from IPython.display import Markdown, display
+tf.config.experimental.enable_op_determinism()
+plt.rcParams.update({"figure.dpi": 110, "axes.grid": True, "grid.alpha": 0.3, "axes.spines.top": False, "axes.spines.right": False})
+
+def tbl(df, caption=None, floatfmt=".3f"):
+    md = df.to_markdown(index=False, floatfmt=floatfmt).replace("nan", "")
+    return Markdown((md + ("\n\n: " + caption if caption else "")))
 ```
 
-## Data Processing
-```{python}
-df = pd.read_excel('data/data/consumer-sentiment.xlsx')
-df['observation_date'] = pd.to_datetime(df['observation_date'])
-df.rename(columns={'UMCSENT': 'consumer_sentiment'}, inplace=True)
-df = df[(df['observation_date'] >= '1978-01-01') & (df['observation_date'] <= '2023-07-01')]
-df = df.dropna()
-df.reset_index(drop=True, inplace=True)
-```
+***
+### Purpose
 
+The preceding sections model the series in this study with linear time series methods. This section applies three recurrent neural networks, a simple recurrent network (`RNN`), a long short-term memory network (`LSTM`) [@hochreiter1997] and a gated recurrent unit (`GRU`) [@cho2014], to the same forecasting task and compares them with the linear methods on the same test period. The target is the University of Michigan index of consumer sentiment, a monthly survey measure that the univariate sections did not cover and that is a plausible channel for the policy rate to reach households. Each network is trained on the previous twelve months of the index and, in a second version, on the previous twelve months of the index and of the Federal Funds Rate, so that the section also asks whether the policy rate helps predict sentiment. The benchmarks are the naive forecast, in which next month equals this month, an ARIMA model selected by AIC, and the same ARIMA with the policy rate as a regressor.
 
-```{python}
-fig = go.Figure()
-fig.add_trace(go.Scatter(x=df['observation_date'], 
-                         y=df['consumer_sentiment'], 
-                         mode='lines',
-                         name='Consumer Sentiment',
-                         line=dict(color='lightseagreen')))
+Recurrent networks are estimated by stochastic gradient descent from random starting values, so their results depend on the random seed. Every network is trained five times with different seeds and reported as a mean and standard deviation across seeds, and TensorFlow's deterministic mode is enabled so that the page renders the same numbers each time.
 
-fig.update_layout(
-    title_text="Consumer Sentiment Over Time<br><sup>indicative Trends of U.S. Consumer Confidence as a Barometer of Economic Perception</sup>",
-    xaxis_title="Date",
-    yaxis_title="Consumer Sentiment",
-    width=900,
-    height=600,  
-    margin=dict(t=100),
-    plot_bgcolor='white',
-    yaxis_range=[df['consumer_sentiment'].min() - 5, df['consumer_sentiment'].max() + 5]
-)
+## Data
 
-fig.update_xaxes(gridcolor='lightgrey', griddash='dot')
-fig.update_yaxes(gridcolor='lightgrey', griddash='dot')
-
-note = 'Source: <a href="https://fred.stlouisfed.org/">Federal Reserve Economic Data</a>'
-fig.add_annotation(
-    showarrow=False,
-    text=note,
-    font=dict(size=10), 
-    xref='paper',
-    x=1,
-    yref='paper',
-    y=-0.1
-)
-
-fig.show()
-```
-
+The series is `UMCSENT`, monthly from January 1978, when the survey became monthly, to July 2023, 547 observations, merged with the Federal Funds Rate for the same months. The index is scaled so that the first quarter of 1966 equals 100.
 
 ```{python}
-def get_train_test(data):
-    data = np.array(data)
-    mean = np.mean(data, axis=0)
-    std = np.std(data, axis=0)
-    
-    normalized_data = (data - mean) / std
-    
-    n = len(normalized_data)
-    split = int(n * 0.85)
-    train_data = normalized_data[:split]
-    test_data = normalized_data[split:]
-    
-    return normalized_data, train_data, test_data
-
-normalized_data, train_data, test_data  = get_train_test(df["consumer_sentiment"])
-print(f'Train shape: {train_data.shape}')
-print(f'Test shape: {test_data.shape}')
-
-def get_XY(dat, time_steps, plot_data_partition=False):
-    Y_ind = np.arange(time_steps, len(dat), time_steps)
-    Y = dat[Y_ind]
-
-    rows_x = len(Y)
-    X_ind = [*range(time_steps * rows_x)]
-    del X_ind[::time_steps] 
-    X = dat[X_ind]
-    X1 = np.reshape(X, (rows_x, time_steps - 1, 1))
-
-    return X1, Y, X_ind, Y_ind
-
-time_steps = 5
-testX, testY, testX_ind, testY_ind = get_XY(test_data, time_steps)
-trainX, trainY, trainX_ind, trainY_ind = get_XY(train_data, time_steps)
+s = pd.read_excel("data/data/consumer-sentiment.xlsx"); s["observation_date"] = pd.to_datetime(s["observation_date"]); s = s.rename(columns={"UMCSENT": "sent"})
+f = pd.read_excel("data/data/fedfunds.xlsx"); f["observation_date"] = pd.to_datetime(f["observation_date"]); f = f.rename(columns={"FEDFUNDS": "ffr"})
+df = s.merge(f, on="observation_date").dropna(); df = df[df.observation_date >= "1978-01-01"].reset_index(drop=True)
+y = df.sent.values; x = df.ffr.values; dates = df.observation_date; n = len(y)
+n_test = int(round(0.15 * n)); n_train = n - n_test
+fig, ax = plt.subplots(2, 1, figsize=(9, 5.5), sharex=True)
+ax[0].plot(dates, y, color="black", lw=1); ax[0].axvspan(dates[n_train], dates.iloc[-1], color="grey", alpha=0.2); ax[0].set_title("Consumer Sentiment, Monthly; Test Period Shaded"); ax[0].set_ylabel("Index, 1966 Q1 = 100")
+ax[1].plot(dates, x, color="black", lw=1); ax[1].axvspan(dates[n_train], dates.iloc[-1], color="grey", alpha=0.2); ax[1].set_title("Federal Funds Rate, Monthly Average"); ax[1].set_ylabel("%"); ax[1].set_xlabel("Year")
+plt.tight_layout(); plt.show()
 ```
-
 
 ```{python}
-train_dates = df['observation_date'][:len(train_data)]
-test_dates = df['observation_date'][len(train_data):]
-
-fig = go.Figure()
-
-fig.add_trace(go.Scatter(x=train_dates, y=train_data, mode='lines', name='Train Data', line=dict(color='lightseagreen')))
-
-fig.add_trace(go.Scatter(x=test_dates, y=test_data, mode='lines', name='Test Data', line=dict(color='darkorange')))
-
-fig.update_layout(
-    title_text="Normalized Consumer Sentiment Over Time<br><sup>indicative Trends of U.S. Consumer Confidence as a Barometer of Economic Perception</sup>",
-    xaxis_title="Date",
-    yaxis_title="Consumer Sentiment",
-    width=900,
-    height=600,  
-    margin=dict(t=100),
-    plot_bgcolor='white')
-
-fig.update_xaxes(gridcolor='lightgrey', griddash='dot')
-fig.update_yaxes(gridcolor='lightgrey', griddash='dot')
-
-note = 'Source: <a href="https://fred.stlouisfed.org/">Federal Reserve Economic Data</a>'
-fig.add_annotation(
-    showarrow=False,
-    text=note,
-    font=dict(size=10), 
-    xref='paper',
-    x=1.1,
-    yref='paper',
-    y=-0.1
-)
-
-fig.show()
+adf_y = adfuller(y); adf_dy = adfuller(np.diff(y))
+stats_tbl = pd.DataFrame({"Statistic": ["Observations", "Mean", "Standard deviation", "Minimum", "Maximum", "ADF statistic, level (p-value)", "ADF statistic, first difference", "Autocorrelation at lag 1, 2, 3", "Correlation with the Federal Funds Rate, levels", "Correlation of monthly changes"],
+                          "Value": [f"{n}", f"{y.mean():.1f}", f"{y.std():.1f}", f"{y.min():.1f} in {dates[y.argmin()]:%B %Y}", f"{y.max():.1f} in {dates[y.argmax()]:%B %Y}",
+                                    f"{adf_y[0]:.2f} ({adf_y[1]:.3f})", f"{adf_dy[0]:.2f} (< 0.001)", ", ".join(f"{v:.3f}" for v in acf(y, nlags=3)[1:]),
+                                    f"{np.corrcoef(y, x)[0, 1]:.3f}", f"{np.corrcoef(np.diff(y), np.diff(x))[0, 1]:.3f}"]})
+tbl(stats_tbl, "Consumer Sentiment, January 1978 to July 2023")
 ```
 
-## RNN
+Sentiment averages 85 with a standard deviation of 13, from a high of 112 in January 2000 to a low of 50 in June 2022. It is highly persistent: the autocorrelation is 0.95 at lag one and the ADF test does not reject a unit root (p = 0.14), while the first difference rejects it decisively. Its monthly changes have a standard deviation of about 4 index points. The correlation with the Federal Funds Rate is −0.04 in levels and 0.03 in monthly changes: there is no linear contemporaneous relationship between the two series to speak of, which sets a low prior for the multivariate networks.
 
-The first image shows the model's training and validation loss decreasing over epochs, with occasional spikes in validation loss suggesting possible overfitting. The second image reveals that the model's predictions closely align with actual consumer sentiment data, indicating effective learning. The RNN model is simple yet performs well, with a low number of parameters and good accuracy, as reflected in the train and test RMSE values.
+The test period is the last 15% of the sample, the 82 months from October 2016 to July 2023, shaded in the figure. It contains the pandemic collapse of April 2020, a fall of 17 points in one month, the rebound, and the 2022 decline to the series' all-time low. Everything before October 2016 is available for training.
+
+## Design
 
 ```{python}
-layer = 50
-epochs = 50
-f_batch = 0.2  
-optimizer = "RMSprop"
-validation_split = 0.2
+L = 12
+mu_y, sd_y = y[:n_train].mean(), y[:n_train].std(); mu_x, sd_x = x[:n_train].mean(), x[:n_train].std()
+ys = (y - mu_y) / sd_y; xs = (x - mu_x) / sd_x
+def windows(feats):
+    X = np.stack([np.stack([fv[t - L:t] for fv in feats], axis=-1) for t in range(L, n)]); return X, ys[L:]
+Xu, Y = windows([ys]); Xm, _ = windows([ys, xs])
+tr = np.arange(L, n) < n_train; te = ~tr
+n_val = int(0.15 * tr.sum())
+print(f"Window length {L} months. Training samples {tr.sum()} (of which {n_val} held out for early stopping), test samples {te.sum()}.")
 
-model = Sequential()
-model.add(
-    SimpleRNN(
-        layer,
-        return_sequences=False,
-        input_shape=(trainX.shape[1], trainX.shape[2]),
-        recurrent_regularizer=regularizers.L2(1e-2),
-        activation="tanh",
-    )
-)
+def build(kind, k, seed, units=32):
+    keras.utils.set_random_seed(seed)
+    layer = {"RNN": SimpleRNN, "LSTM": LSTM, "GRU": GRU}[kind]
+    m = Sequential([layer(units, input_shape=(L, k)), Dense(1)])
+    m.compile(loss="mse", optimizer=keras.optimizers.Adam(1e-3)); return m
 
-model.add(Dense(units=1, activation="linear"))
-model.compile(loss="MeanSquaredError", optimizer=optimizer)
-model.summary()
-
-history = model.fit(
-    trainX,
-    trainY,
-    epochs=epochs,
-    batch_size=int(f_batch * trainX.shape[0]),
-    validation_split=validation_split,
-    verbose=0,
-)
-
-train_predict = model.predict(trainX).squeeze()
-test_predict = model.predict(testX).squeeze()
-train_rmse = np.sqrt(mean_squared_error(trainY, train_predict))
-test_rmse = np.sqrt(mean_squared_error(testY, test_predict))
-print("Train RMSE = %.5f" % (train_rmse))
-print("Test RMSE = %.5f" % (test_rmse))
-
-def plot_loss(history):
-    trace_loss = go.Scatter(y=history.history['loss'], mode='lines', name='Train Loss',line=dict(color='lightseagreen'))
-    trace_val_loss = go.Scatter(y=history.history['val_loss'], mode='lines', name='Validation Loss',line=dict(color='darkorange'))
-
-    fig = make_subplots(rows=1, cols=1)
-    fig.add_trace(trace_loss, row=1, col=1)
-    fig.add_trace(trace_val_loss, row=1, col=1)
-    
-    fig.update_layout(
-    title_text="Model Training and Validation Loss",
-    xaxis_title="Epoch",
-    yaxis_title="Loss",
-    width=900,
-    height=600,  
-    margin=dict(t=100),
-    plot_bgcolor='white')
-
-    fig.update_xaxes(gridcolor='lightgrey', griddash='dot')
-    fig.update_yaxes(gridcolor='lightgrey', griddash='dot')
-
-    fig.show()
-
-plot_loss(history)
-
-def plot_result(trainY, testY, train_predict, test_predict, Y_ind, X, X_ind):
-    trace_actual = go.Scatter(x=Y_ind, y=trainY, mode='markers', name='Target',marker=dict(color='crimson'))
-    trace_training = go.Scatter(x=X_ind, y=X, mode='markers', name='Training',marker=dict(color='lightseagreen'))
-    trace_prediction = go.Scatter(x=Y_ind, y=train_predict, name='Prediction', mode='markers', marker=dict(color='royalblue'))
-    trace_line = go.Scatter(x=Y_ind, y=train_predict, name='Prediction Fit', mode='lines', line=dict(color='darkorange'))
-
-    fig = make_subplots(rows=1, cols=1)
-    fig.add_trace(trace_actual, row=1, col=1)
-    fig.add_trace(trace_training, row=1, col=1)
-    fig.add_trace(trace_prediction, row=1, col=1)
-    fig.add_trace(trace_line, row=1, col=1)
-
-    fig.update_layout(
-    title_text="Actual and Predicted Values",
-    xaxis_title="Index",
-    yaxis_title="Standardized Consumer Sentiment",
-    width=900,
-    height=600,  
-    margin=dict(t=100),
-    plot_bgcolor='white')
-
-    fig.update_xaxes(gridcolor='lightgrey', griddash='dot')
-    fig.update_yaxes(gridcolor='lightgrey', griddash='dot')
-
-    fig.show()
-
-plot_result(trainY, testY, train_predict, test_predict, trainY_ind, trainX, trainX_ind)
+def fit_eval(kind, X, seed):
+    m = build(kind, X.shape[2], seed)
+    Xtr, Ytr = X[tr], Y[tr]
+    es = EarlyStopping(monitor="val_loss", patience=15, restore_best_weights=True)
+    h = m.fit(Xtr[:-n_val], Ytr[:-n_val], validation_data=(Xtr[-n_val:], Ytr[-n_val:]), epochs=300, batch_size=32, verbose=0, callbacks=[es])
+    p_te = m.predict(X[te], verbose=0).squeeze() * sd_y + mu_y; p_tr = m.predict(Xtr, verbose=0).squeeze() * sd_y + mu_y
+    yt = Y[te] * sd_y + mu_y; ytr = Ytr * sd_y + mu_y
+    return dict(model=m, history=h.history, test_rmse=np.sqrt(np.mean((p_te - yt) ** 2)), test_mae=np.mean(np.abs(p_te - yt)),
+                train_rmse=np.sqrt(np.mean((p_tr - ytr) ** 2)), epochs=len(h.history["loss"]), params=m.count_params(), pred=p_te)
 ```
 
+Each training sample is a window of the twelve previous months and the target is the following month, so consecutive samples overlap by eleven months and the 465 training months yield 453 samples. The series are standardised with the mean and standard deviation of the training period only, so that no information from the test period enters the model. Each network has one recurrent layer of 32 units followed by a linear output, giving 1,121 parameters for the `RNN`, 4,385 for the `LSTM` and 3,393 for the `GRU` in the univariate version, and slightly more with the second input. Training minimises mean squared error with the Adam optimiser at a learning rate of 0.001 in batches of 32, for up to 300 epochs, and stops when the loss on the last 15% of the training samples has not improved for 15 epochs, restoring the weights from the best epoch. Forecasts are one step ahead on the test windows, without re-estimation. Errors are reported in index points after reversing the standardisation.
 
-## LSTM
-
-The LSTM model's loss graph displays converging training and validation losses, which indicates good learning with minimal overfitting. Predictions closely follow actual sentiment data, showing the model's effectiveness. Despite its complexity with more parameters, the LSTM has slightly higher RMSE scores than the RNN, which may suggest the need for further model optimization.
+## Training
 
 ```{python}
-layer = 50
-epochs = 50
-f_batch = 0.2  
-optimizer = "RMSprop"
-validation_split = 0.2
-
-model = Sequential()
-model.add(
-    LSTM(
-        layer,
-        return_sequences=False,
-        input_shape=(trainX.shape[1], trainX.shape[2]),
-        recurrent_regularizer=regularizers.L2(1e-2),
-        activation="tanh",
-    )
-)
-
-model.add(Dense(units=1, activation="linear"))
-model.compile(loss="MeanSquaredError", optimizer=optimizer)
-model.summary()
-
-history = model.fit(
-    trainX,
-    trainY,
-    epochs=epochs,
-    batch_size=int(f_batch * trainX.shape[0]),
-    validation_split=validation_split,
-    verbose=0,
-)
-
-train_predict = model.predict(trainX).squeeze()
-test_predict = model.predict(testX).squeeze()
-train_rmse = np.sqrt(mean_squared_error(trainY, train_predict))
-test_rmse = np.sqrt(mean_squared_error(testY, test_predict))
-print("Train RMSE = %.5f" % (train_rmse))
-print("Test RMSE = %.5f" % (test_rmse))
-
-def plot_loss(history):
-    trace_loss = go.Scatter(y=history.history['loss'], mode='lines', name='Train Loss',line=dict(color='lightseagreen'))
-    trace_val_loss = go.Scatter(y=history.history['val_loss'], mode='lines', name='Validation Loss',line=dict(color='darkorange'))
-
-    fig = make_subplots(rows=1, cols=1)
-    fig.add_trace(trace_loss, row=1, col=1)
-    fig.add_trace(trace_val_loss, row=1, col=1)
-    
-    fig.update_layout(
-    title_text="Model Training and Validation Loss",
-    xaxis_title="Epoch",
-    yaxis_title="Loss",
-    width=900,
-    height=600,  
-    margin=dict(t=100),
-    plot_bgcolor='white')
-
-    fig.update_xaxes(gridcolor='lightgrey', griddash='dot')
-    fig.update_yaxes(gridcolor='lightgrey', griddash='dot')
-
-    fig.show()
-
-plot_loss(history)
-
-def plot_result(trainY, testY, train_predict, test_predict, Y_ind, X, X_ind):
-    trace_actual = go.Scatter(x=Y_ind, y=trainY, mode='markers', name='Target',marker=dict(color='crimson'))
-    trace_training = go.Scatter(x=X_ind, y=X, mode='markers', name='Training',marker=dict(color='lightseagreen'))
-    trace_prediction = go.Scatter(x=Y_ind, y=train_predict, name='Prediction', mode='markers', marker=dict(color='royalblue'))
-    trace_line = go.Scatter(x=Y_ind, y=train_predict, name='Prediction Fit', mode='lines', line=dict(color='darkorange'))
-
-    fig = make_subplots(rows=1, cols=1)
-    fig.add_trace(trace_actual, row=1, col=1)
-    fig.add_trace(trace_training, row=1, col=1)
-    fig.add_trace(trace_prediction, row=1, col=1)
-    fig.add_trace(trace_line, row=1, col=1)
-
-    fig.update_layout(
-    title_text="Actual and Predicted Values",
-    xaxis_title="Index",
-    yaxis_title="Standardized Consumer Sentiment",
-    width=900,
-    height=600,  
-    margin=dict(t=100),
-    plot_bgcolor='white')
-
-    fig.update_xaxes(gridcolor='lightgrey', griddash='dot')
-    fig.update_yaxes(gridcolor='lightgrey', griddash='dot')
-
-    fig.show()
-
-plot_result(trainY, testY, train_predict, test_predict, trainY_ind, trainX, trainX_ind)
+seeds = range(5)
+results = {}
+for kind in ["RNN", "LSTM", "GRU"]:
+    for label, X in [("univariate", Xu), ("with FFR", Xm)]:
+        results[(kind, label)] = [fit_eval(kind, X, sd) for sd in seeds]
+fig, ax = plt.subplots(1, 3, figsize=(10, 3.2))
+for a, kind in zip(ax, ["RNN", "LSTM", "GRU"]):
+    h = results[(kind, "univariate")][0]["history"]
+    a.plot(h["loss"], color="black", label="Training"); a.plot(h["val_loss"], color="steelblue", label="Validation"); a.set_title(f"{kind}, Univariate, Seed 0"); a.set_xlabel("Epoch"); a.set_ylabel("Mean squared error, standardised units")
+ax[0].legend(frameon=False); plt.tight_layout(); plt.show()
+ep = {k: [r["epochs"] for r in v] for k, v in results.items()}
+print("Epochs to early stopping, five seeds: " + "; ".join(f"{k[0]} {k[1]}: {min(v)}–{max(v)}" for k, v in ep.items()))
 ```
 
-## GRU
+The loss curves show the three univariate networks converging within the first fifty epochs to a validation loss near 0.1 in standardised units, about 4 index points, with no sustained divergence between training and validation loss. Early stopping ends training between the 40th and 170th epoch depending on the network and the seed; the `RNN`, with the fewest parameters, stops earliest.
 
-The GRU model's losses align well, with minimal overfitting. Predictions accurately track the actual sentiment, indicating strong model performance. With 8,001 parameters, the GRU outperforms the LSTM in error metrics, suggesting a better fit for sentiment analysis.
+## One-Step-Ahead Results
 
 ```{python}
-layer = 50
-epochs = 50
-f_batch = 0.2  
-optimizer = "RMSprop"
-validation_split = 0.2
-
-model = Sequential()
-model.add(
-    GRU(
-        layer,
-        return_sequences=False,
-        input_shape=(trainX.shape[1], trainX.shape[2]),
-        recurrent_regularizer=regularizers.L2(1e-2),
-        activation="tanh",
-    )
-)
-
-model.add(Dense(units=1, activation="linear"))
-model.compile(loss="MeanSquaredError", optimizer=optimizer)
-model.summary()
-
-history = model.fit(
-    trainX,
-    trainY,
-    epochs=epochs,
-    batch_size=int(f_batch * trainX.shape[0]),
-    validation_split=validation_split,
-    verbose=0,
-)
-
-train_predict = model.predict(trainX).squeeze()
-test_predict = model.predict(testX).squeeze()
-train_rmse = np.sqrt(mean_squared_error(trainY, train_predict))
-test_rmse = np.sqrt(mean_squared_error(testY, test_predict))
-print("Train RMSE = %.5f" % (train_rmse))
-print("Test RMSE = %.5f" % (test_rmse))
-
-def plot_loss(history):
-    trace_loss = go.Scatter(y=history.history['loss'], mode='lines', name='Train Loss',line=dict(color='lightseagreen'))
-    trace_val_loss = go.Scatter(y=history.history['val_loss'], mode='lines', name='Validation Loss',line=dict(color='darkorange'))
-
-    fig = make_subplots(rows=1, cols=1)
-    fig.add_trace(trace_loss, row=1, col=1)
-    fig.add_trace(trace_val_loss, row=1, col=1)
-    
-    fig.update_layout(
-    title_text="Model Training and Validation Loss",
-    xaxis_title="Epoch",
-    yaxis_title="Loss",
-    width=900,
-    height=600,  
-    margin=dict(t=100),
-    plot_bgcolor='white')
-
-    fig.update_xaxes(gridcolor='lightgrey', griddash='dot')
-    fig.update_yaxes(gridcolor='lightgrey', griddash='dot')
-
-    fig.show()
-
-plot_loss(history)
-
-def plot_result(trainY, testY, train_predict, test_predict, Y_ind, X, X_ind):
-    trace_actual = go.Scatter(x=Y_ind, y=trainY, mode='markers', name='Target',marker=dict(color='crimson'))
-    trace_training = go.Scatter(x=X_ind, y=X, mode='markers', name='Training',marker=dict(color='lightseagreen'))
-    trace_prediction = go.Scatter(x=Y_ind, y=train_predict, name='Prediction', mode='markers', marker=dict(color='royalblue'))
-    trace_line = go.Scatter(x=Y_ind, y=train_predict, name='Prediction Fit', mode='lines', line=dict(color='darkorange'))
-
-    fig = make_subplots(rows=1, cols=1)
-    fig.add_trace(trace_actual, row=1, col=1)
-    fig.add_trace(trace_training, row=1, col=1)
-    fig.add_trace(trace_prediction, row=1, col=1)
-    fig.add_trace(trace_line, row=1, col=1)
-
-    fig.update_layout(
-    title_text="Actual and Predicted Values",
-    xaxis_title="Index",
-    yaxis_title="Standardized Consumer Sentiment",
-    width=900,
-    height=600,  
-    margin=dict(t=100),
-    plot_bgcolor='white')
-
-    fig.update_xaxes(gridcolor='lightgrey', griddash='dot')
-    fig.update_yaxes(gridcolor='lightgrey', griddash='dot')
-
-    fig.show()
-
-plot_result(trainY, testY, train_predict, test_predict, trainY_ind, trainX, trainX_ind)
+yt = y[n_train:]; naive = y[n_train - 1:n - 1]
+best = None
+for p in range(0, 4):
+    for q in range(0, 3):
+        try:
+            r_ = ARIMA(y[:n_train], order=(p, 1, q)).fit()
+            if best is None or r_.aic < best[0]: best = (r_.aic, (p, 1, q))
+        except Exception: pass
+order = best[1]; oname = "(" + ",".join(map(str, order)) + ")"
+def rolling_arima(order, exog=None):
+    preds = []
+    for t in range(n_train, n):
+        ex = None if exog is None else exog[:t]; exf = None if exog is None else exog[t:t + 1]
+        preds.append(ARIMA(y[:t], order=order, exog=ex).fit(method_kwargs={"warn_convergence": False}).forecast(1, exog=exf)[0])
+    return np.array(preds)
+p_arima = rolling_arima(order); p_arimax = rolling_arima(order, exog=x.reshape(-1, 1))
+rmse = lambda p: np.sqrt(np.mean((p - yt) ** 2)); mae = lambda p: np.mean(np.abs(p - yt))
+rows = []
+for (kind, label), rs in results.items():
+    rows.append({"Model": f"{kind}, {label}", "Parameters": rs[0]["params"], "Test RMSE": np.mean([r["test_rmse"] for r in rs]), "s.d. across seeds": np.std([r["test_rmse"] for r in rs]),
+                 "Test MAE": np.mean([r["test_mae"] for r in rs]), "Training RMSE": np.mean([r["train_rmse"] for r in rs])})
+for nm, p_ in [("Naive, no change", naive), (f"ARIMA{oname}, refit monthly", p_arima), (f"ARIMAX{oname} with FFR", p_arimax)]:
+    rows.append({"Model": nm, "Parameters": 0 if nm.startswith("Naive") else sum(order[::2]) + (1 if "ARIMAX" in nm else 0), "Test RMSE": rmse(p_), "s.d. across seeds": np.nan, "Test MAE": mae(p_), "Training RMSE": np.nan})
+res_tbl = pd.DataFrame(rows)
+tbl(res_tbl, f"One-Step-Ahead Forecast Errors on the Test Period, October 2016 to July 2023, 82 Months; Networks Averaged over Five Seeds; ARIMA Order Selected by AIC on the Training Period")
 ```
 
-## Deep Learning vs. Traditional Time Series 
+```{python}
+fig, ax = plt.subplots(figsize=(9, 4))
+td = dates[n_train:]
+ax.plot(td, yt, color="black", lw=1.5, label="Actual")
+ax.plot(td, naive, color="grey", lw=1, ls="--", label="Naive")
+ax.plot(td, p_arima, color="steelblue", lw=1, label=f"ARIMA{oname}")
+ax.plot(td, results[("RNN", "univariate")][0]["pred"], color="firebrick", lw=1, label="RNN, univariate, seed 0")
+ax.plot(td, results[("GRU", "with FFR")][0]["pred"], color="darkorange", lw=1, label="GRU with FFR, seed 0")
+ax.set_title("Consumer Sentiment, Actual and One-Step-Ahead Forecasts, Test Period"); ax.set_xlabel("Year"); ax.set_ylabel("Index, 1966 Q1 = 100"); ax.legend(frameon=False, ncol=3, fontsize=8)
+plt.tight_layout(); plt.show()
+e_rnn = results[("RNN", "univariate")][0]["pred"] - yt; e_nv = naive - yt
+d = e_rnn ** 2 - e_nv ** 2; dm = d.mean() / np.sqrt(d.var(ddof=1) / len(d))
+print(f"Diebold-Mariano test, RNN (seed 0) against naive, squared-error loss, h = 1: statistic {dm:.2f}, p = {2 * (1 - stats.norm.cdf(abs(dm))):.3f}.")
+```
 
-Deep learning models like RNN, LSTM, and GRU are advanced and able to capture complex, non-linear relationships in data due to their neural network structures. They excel with large datasets and can uncover patterns traditional models might miss. However, they are "black boxes" with less interpretability, and training them requires substantial computational power and data.
+The nine forecasts are within 6% of one another, and the naive forecast is in the middle of them. The univariate `RNN` and `LSTM` have test RMSEs of 4.538 and 4.539 index points against 4.537 for the naive forecast, and the `GRU` 4.558; the differences among the three networks are within their seed-to-seed standard deviations of 0.02 to 0.04. The two ARIMA models are the most accurate, `ARIMA(2,1,1)` at 4.476 and `ARIMAX(2,1,1)` with the policy rate at 4.463, 1.4% and 1.6% below the naive forecast. The Diebold-Mariano test of the `RNN` against the naive forecast gives a statistic of −0.14 and p = 0.89: there is no evidence that the network's one-step forecasts are more accurate than assuming no change.
 
-Traditional time series models such as ARIMA, ARIMAX, VAR, and ARCH are more straightforward and interpretable. They are designed to work with time series data, explicitly accounting for seasonality, trends, and volatility. These models are computationally lighter and can perform well with smaller datasets. They are often chosen for their interpretability and the clear statistical assumptions they are based on.
+Adding the Federal Funds Rate as a second input makes the `RNN` and `LSTM` worse, by 4% and 3% of RMSE, and leaves the `GRU` unchanged, 4.541 against 4.558. The training RMSE falls in each case, from 3.76 to 3.60 for the `RNN`, so the extra input is fitted in the training period and does not transfer: with a correlation between the two series of 0.03 in changes, what the network learns from the policy rate is noise. In the ARIMA framework the policy rate is worth 0.013 of RMSE, a gain too small to distinguish from zero on 82 months.
+
+The figure shows why the forecasts are so alike. Sentiment moves in steps of a few points with occasional jumps, the 17-point fall of April 2020 and the 11-point falls of March 2020 and August 2021, and no model anticipates the jumps. Between them, every model's forecast is close to last month's value, with the ARIMA models adding a small correction for the mean reversion in the differenced series. The test-period RMSE of about 4.5 points is the standard deviation of the monthly change itself, which is what a one-step forecast of a random-walk-like series will approach.
+
+## Multi-Step Forecasts
+
+```{python}
+H = 12
+def recursive(m, H):
+    errs = []
+    for t in range(n_train, n - H + 1):
+        win = ys[t - L:t].copy(); preds = []
+        for h in range(H):
+            p_ = m.predict(win[None, :, None], verbose=0)[0, 0]; preds.append(p_); win = np.r_[win[1:], p_]
+        errs.append(np.array(preds) * sd_y + mu_y - y[t:t + H])
+    return np.array(errs)
+err = {kind: recursive(results[(kind, "univariate")][0]["model"], H) for kind in ["RNN", "LSTM", "GRU"]}
+err["Naive"] = np.array([[y[t - 1] - y[t + h] for h in range(H)] for t in range(n_train, n - H + 1)])
+err[f"ARIMA{oname}"] = np.array([ARIMA(y[:t], order=order).fit(method_kwargs={"warn_convergence": False}).forecast(H) - y[t:t + H] for t in range(n_train, n - H + 1)])
+hs = [1, 3, 6, 12]
+ms_tbl = pd.DataFrame([{"Model": k, **{f"h = {h}": np.sqrt(np.mean(e[:, h - 1] ** 2)) for h in hs}} for k, e in err.items()])
+display(tbl(ms_tbl, f"RMSE of Recursive Forecasts by Horizon, {err['Naive'].shape[0]} Origins from October 2016 to August 2022; Networks Univariate, Seed 0", floatfmt=".2f"))
+fig, ax = plt.subplots(figsize=(7, 3.5))
+for k, e in err.items(): ax.plot(range(1, H + 1), np.sqrt(np.mean(e ** 2, axis=0)), marker="o", ms=3, label=k, color={"Naive": "grey", "RNN": "firebrick", "LSTM": "darkorange", "GRU": "seagreen"}.get(k, "steelblue"))
+ax.set_title("RMSE by Forecast Horizon, Recursive Forecasts"); ax.set_xlabel("Horizon, months"); ax.set_ylabel("RMSE, index points"); ax.set_xticks(range(1, H + 1)); ax.legend(frameon=False, fontsize=8)
+plt.tight_layout(); plt.show()
+```
+
+Recursive forecasts feed each prediction back as the next input, so the horizon can be extended without re-estimation. At every horizon the errors of all five methods lie within a band of about 7%. `ARIMA(2,1,1)` is the most accurate at one to six months and the `RNN` at twelve, where its RMSE of 12.3 points is 6% below the naive forecast's 13.1 and 3% below the ARIMA's 12.6. The `LSTM` sits between the `RNN` and the naive forecast and the `GRU` is the least accurate at every horizon beyond one month. The errors at twelve months are about 12 to 13 points for every method, close to the unconditional standard deviation of the series, 13.2: a year ahead, none of the models knows more about sentiment than its long-run distribution says.
+
+## Deep Learning and Linear Models
+
+On this series the recurrent networks match the linear models and do not improve on them. Three features of the problem explain that. The sample is small by the standards of deep learning, 453 training windows, so a network with one to four thousand parameters is estimated from fewer examples than it has weights, and early stopping at 50 to 180 epochs is what prevents it from fitting the training set. The series is nearly a random walk at monthly frequency, so the best one-step forecast is close to the last value and there is little nonlinear structure for a network to find; the ARIMA's advantage comes from a linear correction the networks could represent but do not learn reliably. And the test period contains a shock, the pandemic, whose size has no precedent in the training data, which penalises every method equally.
+
+The networks also cost more to use. Each requires a choice of window length, units, optimiser, learning rate, batch size and stopping rule, and its result varies with the seed by up to 0.08 points of RMSE; the ARIMA is specified by three integers chosen by AIC and is the same every time. The `RNN`, the simplest network, is the best of the three here and the one whose training is fastest, which is consistent with the data supporting only a small amount of structure. Where recurrent networks earn their cost is on long, high-frequency series with nonlinear dynamics or many inputs; a 547-month survey index is not that case.
+
+The policy rate does not help either model class predict sentiment a month ahead. This is consistent with the ARIMAX finding for inflation: the policy rate's effect on households operates through channels, credit conditions, employment, prices, that take longer than a month and that a direct regression on the rate does not capture.
+
+## Summary
+
+```{python}
+display(tbl(pd.DataFrame({"Item": ["Target", "Test period", "Networks", "Inputs", "Seeds", "Best network, one step", "Best model, one step", "Best model, twelve steps", "Federal Funds Rate", "Diebold-Mariano, RNN vs. naive"],
+  "Result": ["Consumer sentiment, monthly, 1978–2023, 547 observations", "October 2016 to July 2023, 82 months, one step ahead", "RNN, LSTM, GRU; one layer of 32 units, Adam, early stopping",
+             "Previous 12 months of sentiment; or of sentiment and the Federal Funds Rate", "Five per model; RMSE reported as mean, s.d. 0.02–0.08",
+             "RNN, univariate: RMSE 4.54 (naive 4.54)", "ARIMAX(2,1,1) with FFR: RMSE 4.46; ARIMA(2,1,1): 4.48", "RNN: RMSE 12.3 (naive 13.1, ARIMA 12.6)",
+             "Adds nothing to one-step accuracy in either model class", "p = 0.89"]}), "Retained Results"))
+```
+
+### What the Section Found
+
+Consumer sentiment is a persistent series whose month-to-month changes are close to unpredictable, and every method tested, from the naive forecast to a 4,500-parameter `LSTM`, produces one-step-ahead errors of about 4.5 index points on the 2016–2023 test period. The ordering is naive ≈ networks > ARIMA by margins of 1 to 2%, with the ARIMA's advantage coming from a small mean-reversion term. At twelve months the `RNN` is marginally the best, 6% below the naive forecast. No difference in this section is statistically distinguishable from zero.
+
+The Federal Funds Rate has no predictive value for sentiment at a one-month horizon. It lowers the ARIMA's RMSE by 0.3% and raises the `RNN`'s and `LSTM`'s by 3 to 4%; its correlation with sentiment is −0.04 in levels and 0.03 in changes. This is the third section of the study to find that the policy rate's contemporaneous or short-lag relationship with a target is weak or absent, after the inflation regression and the dollar-return equation, and the same reason applies: the rate responds to the economy and acts on it with a lag.
+
+### Model Choice
+
+For this series the linear models are the right tool and the networks are a check on them. A recurrent network is a flexible function of the last twelve observations, and on a series where the best forecast is close to the last observation the flexibility is not used. The comparison is fair to the networks, with standardisation by training statistics, early stopping on a held-out set, five seeds and a deterministic configuration, and it would need a longer or richer series to come out differently. If the study were extended, a network with inputs beyond sentiment and the policy rate, such as unemployment, inflation and equity returns, would be the natural next test, since the multivariate case is where recurrent networks have an architectural advantage over ARIMAX.
+
+### Limitations
+
+The test period is 82 months and includes one extreme event, so the RMSE ranking is sensitive to a few observations; a Diebold-Mariano test rejects none of the differences. The networks were tuned only lightly, with one architecture, one window length and one learning rate, and a search over those settings could change the margins, though not, on this evidence, the conclusion. The recursive multi-step forecasts of the networks use the seed-0 models only. The ARIMA order was chosen once on the training period and held fixed while the coefficients were re-estimated each month; the networks were not re-estimated during the test period, which favours the ARIMA slightly at the one-step horizon.

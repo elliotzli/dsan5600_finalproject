@@ -1,967 +1,521 @@
 ---
-title: "ARIMAX/SARIMAX/VAR"
-subtitle: "Analysis of the Interplay of Monetary Policy and Market Variables"
-format:   
+title: "ARIMAX and VAR Models"
+subtitle: "The Federal Funds Rate as a Regressor and as a Variable in a System"
+date: "2023-12-3"
+date-modified: today
+date-format: long
+format:
   html:
     smooth-scroll: true
     toc: true
     code-fold: true
     code-tools: true
+    lightbox: true
     embed-resources: true
-    mermaid:
-      theme: neutral
 bibliography: citation.bib
-execute: 
+execute:
   echo: false
   warning: false
+  message: false
 ---
 
-```{r}
-library(reshape2)
-library(dplyr)
-library(parallel)
-library(zoo)
-library(TTR)
-library(readr)
-library(readxl)
-library(tidyverse)
-library(ggplot2)
-library(forecast)
-library(astsa) 
-library(xts)
-library(tseries)
-library(fpp2)
-library(fma)
-library(lubridate)
-library(TSstudio)
-library(quantmod)
-library(tidyquant)
-library(plotly)
-library(knitr)
-library(vars)
-```
+```{r setup}
+suppressMessages({
+  library(readxl); library(dplyr); library(lubridate); library(ggplot2)
+  library(forecast); library(tseries); library(vars); library(knitr)
+})
+theme_set(theme_minimal(base_size = 11) + theme(panel.grid.minor = element_blank()))
 
-## Literature Review
+rd <- function(f) { d <- na.omit(read_excel(file.path("data/data", f))); data.frame(Date = as.Date(d[[1]]), v = as.numeric(d[[2]])) }
+mavg <- function(f) { d <- rd(f); d$Date <- floor_date(d$Date, "month"); d |> group_by(Date) |> summarize(v = mean(v), .groups = "drop") }
+qavg <- function(f) { d <- rd(f); d$Date <- floor_date(d$Date, "quarter"); d |> group_by(Date) |> summarize(v = mean(v), .groups = "drop") }
+fmt_p <- function(p) ifelse(p < 0.001, "< 0.001", formatC(p, format = "f", digits = 3))
 
-We will conduct a brief analysis on the topics of SARIMAX, ARIMAX, and VAR models in the context of monetary policy and treasury markets. Specifically, we will explore the relationships between inflation, the Federal Funds Rate, 30-Year Treasury Yield, and other related variables.
-
-**SARIMAX Model for Inflation:** The Seasonal Autoregressive Integrated Moving Average with Exogenous Variables model is a powerful tool for time series analysis that incorporates external or exogenous variables into the traditional ARIMA framework. In the context of inflation forecasting, the SARIMAX model allows us to consider how variables like the Federal Funds Rate and lagged Federal Funds Rate affect inflation dynamics.
-
--   **Federal Funds Rate:** Research has shown that changes in the Federal Funds Rate, which is controlled by the Federal Reserve, can have a significant impact on inflation. A higher Federal Funds Rate tends to put downward pressure on inflation by making borrowing more expensive. Conversely, a lower rate can stimulate economic activity and potentially lead to higher inflation.
-
-**ARIMAX Model for 30-Year Treasury Yield:** The Autoregressive Integrated Moving Average with Exogenous Variables model is an extension of the ARIMA model that incorporates external variables. When applied to the 30-Year Treasury Yield, it allows us to assess the influence of the Federal Funds Rate on long-term interest rates.
-
--   **Federal Funds Rate:** Changes in the Federal Funds Rate can influence the 30-Year Treasury Yield. An increase in the Federal Funds Rate typically leads to higher long-term interest rates, including the 30-Year Treasury Yield. This relationship is essential for understanding the impact of monetary policy on the bond market.
-
-**VAR Model for Monetary Policy and Treasury Markets:** Vector Autoregression (VAR) models are used to analyze the dynamic relationships among multiple time series variables. In the context of monetary policy and treasury markets, a VAR model can help us understand how different variables, including the Federal Funds Rate and various Treasury Yields, interact with each other.
-
--   **Fed Funds Rate, Treasury Yields:** A VAR model that includes variables such as the Federal Funds Rate, 3-Month Yield, 6-Month Yield, 1-Year Yield, 5-Year Yield, 10-Year Yield, and 30-Year Yield can provide insights into the interconnectedness of these financial indicators. For example, an increase in the Federal Funds Rate can have ripple effects on short-term and long-term yields, impacting borrowing costs and investment decisions.
-
-**VAR Model for Monetary Policy and Macroeconomic Indicators:** The Vector Autoregression model is particularly suited for analyzing the interactions between monetary policy and broader macroeconomic indicators. By including variables such as the Federal Funds Rate (FFR), Gross Domestic Product (GDP), Unemployment Rate, Consumer Price Index (CPI), and the 30-Year Mortgage Rate, this model offers a comprehensive view of how monetary policy decisions ripple through the economy.
-
--   **Interactions Among Variables:** The VAR model facilitates the understanding of how a change in the FFR, a key instrument of monetary policy, impacts other significant economic indicators. For example, an increase in the FFR might lead to higher mortgage rates, affecting the housing market and consumer spending. Similarly, changes in the eFFR can influence GDP and unemployment rates, providing insights into the broader economic consequences of monetary policy decisions. This model is invaluable for policymakers and economists in anticipating the effects of monetary policy changes on the overall economy.
-
-In summary, the literature review suggests that the Federal Funds Rate is a central variable that affects both inflation and interest rates. SARIMAX and ARIMAX models can be employed to capture these relationships, while a VAR model can provide a comprehensive view of the interactions among various monetary policy and treasury market variables. These modeling approaches are valuable tools for forecasting and policy analysis in the realm of monetary policy and treasury markets.
-
-## SARIMAX - Inflation vs. Fed Funds Rate
-
-### Data Processing
-
-The plot shows the CPI and the Federal Funds Rate over time. The CPI has experienced a steady increase suggesting inflation growth, while the Federal Funds Rate has remained relatively stable, with only minor fluctuations over the same period.
-
-```{r}
-df_fedfunds <- read_excel('data/data/fedfunds.xlsx')
-df_cpi <- read_excel('data/data/cpi-u.xlsx')
-
-df_fedfunds <- na.omit(df_fedfunds)
-df_fedfunds$Date <- as.Date(df_fedfunds[[1]])
-df_fedfunds$FedFundsRate <- as.numeric(df_fedfunds[[2]])
-df_cpi <- na.omit(df_cpi)
-df_cpi$Date <- as.Date(df_cpi[[1]])
-df_cpi$CPI <- as.numeric(df_cpi[[2]])
-
-df_combined <- merge(df_fedfunds, df_cpi, by="Date", all=TRUE)
-df_combined <- arrange(df_combined, Date)
-df_combined$L2FedFundsRate <- lag(df_combined$FedFundsRate, n = 3, order_by = df_combined$Date)
-ts_combined <- ts(data = df_combined[df_combined$Date >= as.Date("1954-09-01"), c("FedFundsRate","L2FedFundsRate","CPI")], 
-                  start = c(year(as.Date("1954-09-01")), month(as.Date("1954-09-01"))),
-                  frequency = 12)
-# Plot the time series data
-autoplot(ts_combined) + 
-    ggtitle("Federal Funds Rate annd CPI Over Time") +
-    xlab("Year") + 
-    ylab("Values") + 
-    theme(panel.background = element_blank())
-```
-
-<br>
-
-### Stationary Check
-
-```{r}
-FedFundsRate <- ts_combined[, "FedFundsRate"]
-L2FedFundsRate <- ts_combined[, "L2FedFundsRate"]
-CPI <- ts_combined[, "CPI"]
-FedFundsRate <- diff(FedFundsRate, differences = 1)
-L2FedFundsRate <- diff(L2FedFundsRate, differences = 1)
-CPI <- diff(CPI, differences = 1)
-start_year <- start(ts_combined)[1]
-start_month <- start(ts_combined)[2] + 1 # Adjusting the start month due to differencing
-ts_combined <- ts(cbind(FedFundsRate, L2FedFundsRate, CPI), 
-                       start = c(start_year, start_month), 
-                       frequency = frequency(ts_combined))
-ts_combined <- na.omit(ts_combined)
-```
-
-```{r}
-for(i in 1:ncol(ts_combined)) {
-    ts_data <- ts_combined[, i]
-    adf_test <- adf.test(ts_data)
-
-    cat("Augmented Dickey-Fuller Test Results for", colnames(ts_combined)[i], ":\n")
-    cat("Test Statistic:", adf_test$statistic, "\n")
-    cat("P-value:", adf_test$p.value, "\n")
-    cat("Critical Values:", toString(adf_test$critical), "\n")
-    
-    if (adf_test$p.value < 0.05) {
-      cat("The time series", colnames(ts_combined)[i], "is stationary based on the ADF test.\n\n")
-    } else {
-      cat("The time series", colnames(ts_combined)[i], "is not stationary based on the ADF test.\n\n")
-    }
+adf_line <- function(x, label) {
+  a <- suppressWarnings(adf.test(x))
+  cat(sprintf("%-34s ADF statistic %6.2f   p-value %s\n", label, a$statistic,
+              ifelse(a$p.value <= 0.01, "< 0.01", ifelse(a$p.value >= 0.99, "> 0.99", sprintf("%.3f", a$p.value)))))
 }
 
-```
-
-<br>
-
-### Model Fitting
-
-#### **auto.arima**
-
-`auto.arima` suggests a ARIMA model with seasonal components: `SARIMAX(0,1,3)(0,0,2)[12]`
-
-```{r}
-xreg <- cbind(l0 = ts_combined[, "FedFundsRate"],
-              l2 = ts_combined[, "L2FedFundsRate"])
-fit <- auto.arima(ts_combined[, "CPI"], xreg = xreg)
-summary(fit)
-```
-
-<br>
-
-#### **Custom Model**
-
-The first regression model shows both the current and lagged Federal Funds Rate positively affecting the Consumer Price Index (CPI), with a slightly better fit than the second model. The second model, using only the current Federal Funds Rate, also indicates a positive effect on CPI but with a weaker fit. Both models confirm a significant relationship between the Federal Funds Rate and CPI.
-
-**1. CPI \~ FedFundsRate + L2FedFundsRate**
-
-```{r}
-fit.reg1 <- lm(CPI ~ FedFundsRate + L2FedFundsRate, data=ts_combined)
-summary(fit.reg1)
-```
-
-**2. CPI \~ FedFundsRate**
-
-```{r}
-fit.reg <- lm(CPI ~ FedFundsRate, data=ts_combined)
-summary(fit.reg)
-```
-
-<br>
-
-#### **ACF & PACF Plot**
-
-Significant lags shown in the first difference ACF and PACF plots: `d=0,1`, `D=0,1`, `P=1,2`, `Q=1`, `p=1,2`, `q=0,1`
-
-```{r}
-res<-ts(residuals(fit.reg),star=decimal_date(as.Date("1954-09-01",format = "%Y-%m-%d")),frequency = 12)
-res1 = ts(residuals(fit.reg),star=decimal_date(as.Date("1954-09-01",format = "%Y-%m-%d")),frequency = 12) %>% diff()
-ggAcf(res) + theme(panel.background = element_blank())
-ggPacf(res) + theme(panel.background = element_blank())
-ggAcf(res1) + theme(panel.background = element_blank())
-ggPacf(res1) + theme(panel.background = element_blank())
-```
-
-<br>
-
-#### **Hyperparameter Optimization**
-
-```{r}
-#d=0,1, D=0,1, P=1,2 Q=1,2, p=1,2,3,4, q=1,2
-SARIMAX=function(p1,p2,q1,q2,P1,P2,Q1,Q2,d1,d2,data){
-  
-  temp=c()
-  d=1
-  D=1
-  
-  s=12
-  
-  i=1
-  temp= data.frame()
-  ls=matrix(rep(NA,9*40),nrow=40)
-  
-  
-  for (p in p1:p2)
-  {
-    for(q in q1:q2)
-    {
-      for(P in P1:P2)
-      {
-        for(Q in Q1:Q2)
-        {
-          for(d in d1:d2)
-       
-        {
-          if(p+d+q+P+D+Q<=8)
-          {
-            
-            model<- Arima(data,order=c(p,d,q),seasonal=c(P,D,Q))
-            ls[i,]= c(p,d,q,P,D,Q,model$aic,model$bic,model$aicc)
-            i=i+1
-
-          }
-          
-        }
-      }
-    }
-    
-  }
-  
-  }
-  temp= as.data.frame(ls)
-  names(temp)= c("p","d","q","P","D","Q","AIC","BIC","AICc")
-  
-  temp
-  
+# Coefficient table, information criteria and Ljung-Box p-values for an Arima fit.
+report <- function(fit, lags = c(8, 12, 24)) {
+  se <- sqrt(diag(fit$var.coef)); z <- coef(fit) / se
+  k  <- sum(fit$arma[c(1, 2, 3, 4)])
+  tab <- data.frame(Coefficient = names(coef(fit)), Estimate = round(coef(fit), 4), `Std. Error` = round(se, 4),
+                    z = round(z, 2), p = formatC(2 * pnorm(-abs(z)), format = "f", digits = 4), check.names = FALSE)
+  lb <- sapply(lags, function(L) Box.test(residuals(fit), lag = L, type = "Ljung-Box", fitdf = k)$p.value)
+  cat(sprintf("AIC %.2f   AICc %.2f   BIC %.2f   residual s.d. %.4f\n", fit$aic, fit$aicc, fit$bic, sqrt(fit$sigma2)))
+  cat(sprintf("Ljung-Box p-value at lag %d: %.3f", lags, lb), sep = "   "); cat("\n")
+  kable(tab, row.names = FALSE, align = "lrrrr")
 }
 
-#d=0,1, D=0,1, P=1,2 Q=1,2, p=1,2,3,4, q=1,2
-
-output=SARIMAX(p1=1,p2=4,q1=1,q2=2,P1=1,P2=2,Q1=1,Q2=2,d1=0,d2=1,data=res1)
-aic_row <- paste("Model fitting with minimum AIC:\n", toString(output[which.min(output$AIC),]))
-aicc_row <- paste("\nModel fitting with minimum AICc:\n", toString(output[which.min(output$AICc),]))
-bic_row <- paste("\nModel fitting with minimum BIC:\n", toString(output[which.min(output$BIC),]))
-all_rows <- paste(aic_row, aicc_row, bic_row, sep="\n")
-cat(all_rows)
-```
-
-<br>
-
-### Model Diagnostics
-
-Both `SARIMAX(1,0,2)(2,1,1)[12]` and `SARIMAX(0,1,3)(0,0,2)[12]` evaluated through their diagnostic plots and statistical outputs suggest adequate fits for time series forecasting. The first model's autocorrelations are within acceptable limits, and key coefficients are statistically significant, indicating a good fit, albeit with a non-significant constant term. The second model presents a marginally better fit, as evidenced by lower AIC and BIC values, and most coefficients are significant, though ma2 and sma2 are not. Both models have residuals that are approximately normally distributed and independent according to the Ljung-Box test, with **the** **second model potentially being the preferred choice due to its lower complexity and better fit indicators.**
-
-```{r}
-model_output <- capture.output(sarima((res1),1, 0, 2, 2, 1, 1, 12))
-model_output[47:80]
-```
-
-```{r}
-model_output2 <- capture.output(sarima((res1),0, 1, 3, 0, 0, 2, 12))
-model_output2[55:87]
-```
-
-<br>
-
-### Cross Validation
-
-The `SARIMAX(0,1,3)(0,0,2)[12]` model demonstrates superior performance in cross-validation, exhibiting lower RMSE values during testing phases. This indicates a more accurate and reliable forecasting ability, particularly in capturing the seasonal trends and dependencies in the data.
-
-```{r}
-n <- length(res1) ## 827
-k <- n*0.7
-forecast_horizon <- 4
-step_size <- 25  # Define step size
-
-# Initialize RMSE matrices
-rmse1 <- matrix(NA, ceiling((n - k - forecast_horizon + 1) / step_size), forecast_horizon)
-rmse2 <- matrix(NA, ceiling((n - k - forecast_horizon + 1) / step_size), forecast_horizon)
-
-for (i in seq(1, n - k - forecast_horizon + 1, by = step_size)) {
-  xtrain <- res[1:min(n, (k + i - 1))]
-  xtest <- res[min(n, (k + i)):min(n, (k + i + forecast_horizon - 1))]
-
-  fit1 <- Arima(xtrain, order = c(1, 0, 2), seasonal = list(order = c(2, 1, 1), period = 12),
-                include.drift = TRUE, method = "ML")
-  fcast1 <- forecast(fit1, h = forecast_horizon)
-  
-  fit2 <- Arima(xtrain, order = c(0, 1, 3), seasonal = list(order = c(0, 0, 2), period = 12),
-                include.drift = TRUE, method = "ML")
-  fcast2 <- forecast(fit2, h = forecast_horizon)
-  
-  idx <- (i - 1) / step_size + 1
-  if (length(xtest) == forecast_horizon) {
-    rmse1[idx, 1:forecast_horizon] <- sqrt((fcast1$mean - xtest)^2)
-    rmse2[idx, 1:forecast_horizon] <- sqrt((fcast2$mean - xtest)^2)
-  }
+# Grid of ARMA(p,q)(P,0,0)[s] error structures for a regression on xreg.
+grid_x <- function(y, x, pmax = 3, qmax = 3, Pmax = 0) {
+  g <- expand.grid(p = 0:pmax, q = 0:qmax, P = 0:Pmax)
+  ic <- t(apply(g, 1, function(o) {
+    m <- tryCatch(Arima(y, order = c(o["p"], 0, o["q"]), seasonal = c(o["P"], 0, 0), xreg = x), error = function(e) NULL)
+    if (is.null(m)) c(NA, NA, NA) else c(m$aic, m$aicc, m$bic) }))
+  g <- cbind(g, AIC = round(ic[, 1], 2), AICc = round(ic[, 2], 2), BIC = round(ic[, 3], 2))
+  if (Pmax == 0) g$P <- NULL
+  g[order(g$AICc), ]
 }
 
-# Plotting
-plot(1:4, colMeans(rmse1, na.rm = TRUE), type = "l", col = 2, xlab = "Horizon", ylab = "RMSE", ylim = c(0, 1))
-lines(1:4, colMeans(rmse2, na.rm = TRUE), type = "l", col = 3)
-legend("topleft", legend = c("SARIMAX(1,0,2)(2,1,1)[12]", "SARIMAX(0,1,3)(0,0,2)[12]"), col = 2:3, lty = 1)
-```
-
-<br>
-
-### Forecasting
-
-The SARIMA model forecasts for the Federal Funds Rate and CPI suggest upcoming economic uncertainty. The Fed Funds Rate prediction shows potential for slight increases and a broad range of outcomes, signaling that interest rate policies may need to adapt to evolving economic conditions. The CPI forecast indicates rising volatility, with a trend that suggests inflation could be a concern, requiring careful monitoring and possible intervention from policymakers.
-
-```{r}
-ts_combined[, "FedFundsRate"] %>%
-  Arima(order = c(0, 2, 3), seasonal = list(order = c(0, 0, 2), period = 12),
-                include.drift = TRUE) %>%
-  forecast(h=100) %>%
-  autoplot() +
-  ylab("Percentage Change") + xlab("Year") + ggtitle("Fed Funds Rate Percentage Change Prediction") + theme(panel.background = element_blank())
-```
-
-```{r}
-ts_combined[, "CPI"] %>%
-  Arima(order = c(0, 2, 3), seasonal = list(order = c(0, 0, 2), period = 12),
-                include.drift = TRUE) %>%
-  forecast(h=60) %>%
-  autoplot() +
-  ylab("Percentage Change") + xlab("Year") + ggtitle("CPI Percentage Change Prediction") + theme(panel.background =
-element_blank())
-```
-
-## ARIMAX - 30-Year Treasury Yield vs. Fed Funds Rate
-
-### Data Processing
-
-The plot shows the 30-Year Treasury Yield and the Federal Funds Rate over time. Both series appear to move together over the years, suggesting a relationship where changes in the Federal Funds Rate may be associated with similar movements in the long-term Treasury Yield.
-
-```{r}
-df_fedfunds <- read_excel('data/data/fedfunds.xlsx')
-df_30yr <- read_excel('data/data/30-yrs-t-bill-yield.xlsx')
-
-df_fedfunds <- na.omit(df_fedfunds)
-df_fedfunds$Date <- as.Date(df_fedfunds[[1]])
-df_fedfunds$FedFundsRate <- as.numeric(df_fedfunds[[2]])
-df_30yr <- na.omit(df_30yr)
-df_30yr$Date <- as.Date(df_30yr[[1]])
-df_30yr$DGS30 <- as.numeric(df_30yr[[2]])
-df_30yr <- df_30yr %>%
-  mutate(Year = year(Date), Month = month(Date)) %>%
-  group_by(Year, Month) %>%
-  summarize(treasury_yield_30 = mean(DGS30, na.rm = TRUE)) %>%
-  mutate(Date = as.Date(paste(Year, Month, "01", sep = "-")))
-
-df_combined <- merge(df_fedfunds, df_30yr, by="Date")
-df_combined <- df_combined[, c(1,4,7)]
-
-
-ts_combined <- ts(data = df_combined[df_combined$Date >= as.Date("1977-02-01"), c("FedFundsRate","treasury_yield_30")], 
-                  start = c(year(as.Date("1977-02-01")), month(as.Date("1977-02-01"))),
-                  frequency = 12)
-
-# Plot the time series data
-autoplot(ts_combined) + 
-    ggtitle("30 Year Treasury Yield and Federal Funds Rate Over Time") +
-    xlab("Year") + 
-    ylab("Values") + 
-    theme(panel.background = element_blank())
-```
-
-<br>
-
-### Stationary Check
-
-```{r}
-FedFundsRate <- ts_combined[, "FedFundsRate"]
-treasury_yield_30 <- ts_combined[, "treasury_yield_30"]
-FedFundsRate <- diff(FedFundsRate, differences = 1)
-treasury_yield_30 <- diff(treasury_yield_30, differences = 1)
-start_year <- start(ts_combined)[1]
-start_month <- start(ts_combined)[2] + 1
-ts_combined <- ts(cbind(FedFundsRate, treasury_yield_30), 
-                       start = c(start_year, start_month), 
-                       frequency = frequency(ts_combined))
-ts_combined <- na.omit(ts_combined)
-```
-
-```{r}
-for(i in 1:ncol(ts_combined)) {
-    ts_data <- ts_combined[, i]
-    adf_test <- adf.test(ts_data)
-
-    cat("Augmented Dickey-Fuller Test Results for", colnames(ts_combined)[i], ":\n")
-    cat("Test Statistic:", adf_test$statistic, "\n")
-    cat("P-value:", adf_test$p.value, "\n")
-    cat("Critical Values:", toString(adf_test$critical), "\n")
-    
-    if (adf_test$p.value < 0.05) {
-      cat("The time series", colnames(ts_combined)[i], "is stationary based on the ADF test.\n\n")
-    } else {
-      cat("The time series", colnames(ts_combined)[i], "is not stationary based on the ADF test.\n\n")
-    }
-}
-
-```
-
-<br>
-
-### Model Fitting
-
-#### **auto.arima**
-
-`auto.arima` suggests a ARIMA model: `ARIMAX(0,0,2)`
-
-```{r}
-fit <- auto.arima(ts_combined[,2], xreg = ts_combined[,1])
-summary(fit)
-```
-
-<br>
-
-#### **Custom Model**
-
-```{r}
-fit.reg <- lm(treasury_yield_30 ~ FedFundsRate, data=ts_combined)
-summary(fit.reg)
-```
-
-<br>
-
-#### **ACF & PACF Plot**
-
-Significant lags shown in the first difference ACF and PACF plots: `d=0,1`, `p=1,2`, `q=1,2`
-
-```{r}
-res<-ts(residuals(fit.reg),star=decimal_date(as.Date("1977-02-01",format = "%Y-%m-%d")),frequency = 12)
-res1 = ts(residuals(fit.reg),star=decimal_date(as.Date("1977-02-01",format = "%Y-%m-%d")),frequency = 12) %>% diff()
-ggAcf(res) + theme(panel.background = element_blank())
-ggPacf(res) + theme(panel.background = element_blank())
-ggAcf(res1) + theme(panel.background = element_blank())
-ggPacf(res1) + theme(panel.background = element_blank())
-```
-
-<br>
-
-#### **Hyperparameter Optimization**
-
-```{r}
-#d=0,1, p=1,2, q=1,2
-i=1
-
-temp= data.frame()
-ls=matrix(rep(NA,6*12),nrow=12)
-
-
-for (p in 1:2)
-{
-  for(q in 1:2)
-  {
-    for(d in 0:1)
-    {
-      
-      if(p+d+q<=8)
-      {
-        model<- Arima(res,order=c(p,d,q),include.drift=TRUE)
-        ls[i,]= c(p,d,q,model$aic,model$bic,model$aicc)
-        i=i+1
-
-      }
-      
+# Rolling-origin cross-validation for regression-with-ARMA-errors models.
+# From each origin the model is re-estimated on all earlier data and forecast
+# 1 to H steps ahead; the regressor's future values are taken as realised.
+cv_x <- function(y, X, specs, frac = 0.7, H = 12) {
+  n <- length(y); k <- floor(n * frac); origins <- k:(n - 1)
+  err <- lapply(specs, function(s) matrix(NA, length(origins), H))
+  for (ii in seq_along(origins)) {
+    o <- origins[ii]; hh <- min(H, n - o)
+    ytr <- ts(y[1:o], frequency = frequency(y)); yte <- y[(o + 1):(o + hh)]
+    for (j in seq_along(specs)) {
+      s <- specs[[j]]
+      xtr <- if (is.null(s$x)) NULL else X[1:o, s$x, drop = FALSE]
+      xte <- if (is.null(s$x)) NULL else X[(o + 1):(o + hh), s$x, drop = FALSE]
+      f <- tryCatch(Arima(ytr, order = s$order, seasonal = s$seasonal, xreg = xtr), error = function(e) NULL)
+      if (is.null(f)) next
+      f$call$xreg <- xtr
+      err[[j]][ii, 1:hh] <- forecast(f, h = hh, xreg = xte)$mean - yte
     }
   }
+  nm <- sapply(specs, `[[`, "name")
+  tab <- data.frame(Model = nm,
+                    `MAE h = 1` = sapply(err, function(e) round(mean(abs(e[, 1]), na.rm = TRUE), 4)),
+                    t(sapply(err, function(e) round(sqrt(colMeans(e^2, na.rm = TRUE))[c(1, 3, 6, 12)], 4))), check.names = FALSE)
+  names(tab)[3:6] <- paste0("RMSE h = ", c(1, 3, 6, 12))
+  cat(sprintf("\n\nInitial training set: %d observations. Forecast origins: %d.\n\n", k, length(origins)))
+  print(kable(tab, row.names = FALSE)); cat("\n\n")
 }
 
-temp= as.data.frame(ls)
-names(temp)= c("p","d","q","AIC","BIC","AICc")
-
-aic_row <- paste("Model fitting with minimum AIC:\n", toString(temp[which.min(temp$AIC),]))
-aicc_row <- paste("\nModel fitting with minimum AICc:\n", toString(temp[which.min(temp$AICc),]))
-bic_row <- paste("\nModel fitting with minimum BIC:\n", toString(temp[which.min(temp$BIC),]))
-all_rows <- paste(aic_row, aicc_row, bic_row, sep="\n")
-cat(all_rows)
-```
-
-<br>
-
-### Model Diagnostics
-
-The ARIMA model diagnostics for the 30-year Treasury yields and the Federal Funds Rate indicate effective fits with well-behaved residuals, suggesting that the models capture the essential patterns of these financial indicators. The significant terms in each model reflect the distinct behaviors of the yields and rates, with the 30-year Treasury likely exhibiting more long-term trends and the Federal Funds Rate responding to short-term influences. The slightly superior AIC and AICc values for the second model hint at a better fit for capturing the quick adjustments typical in the Federal Funds Rate.
-
-```{r}
-model_output1 <- capture.output(sarima((res),1,0,1))
-model_output1[30:59]
-```
-
-```{r}
-model_output2 <- capture.output(sarima((res),0,0,2))
-model_output2[21:50]
-```
-
-<br>
-
-### Cross Validation
-
-The `ARIMAX(1,0,1)` model demonstrates superior performance in cross-validation, exhibiting lower RMSE values during testing phases. This indicates a more accurate and reliable forecasting ability, particularly in capturing the seasonal trends and dependencies in the data.
-
-```{r}
-n <- length(res)
-k <- n*0.7
-forecast_horizon <- 4
-step_size <- 25
-
-rmse1 <- matrix(NA, ceiling((n - k - forecast_horizon + 1) / step_size), forecast_horizon)
-rmse2 <- matrix(NA, ceiling((n - k - forecast_horizon + 1) / step_size), forecast_horizon)
-
-for (i in seq(1, n - k - forecast_horizon + 1, by = step_size)) {
-  xtrain <- res[1:min(n, (k + i - 1))]
-  xtest <- res[min(n, (k + i)):min(n, (k + i + forecast_horizon - 1))]
-
-  fit1 <- Arima(xtrain, order = c(1, 0, 1))
-  fcast1 <- forecast(fit1, h = forecast_horizon)
-  
-  fit2 <- Arima(xtrain, order = c(0, 0, 2))
-  fcast2 <- forecast(fit2, h = forecast_horizon)
-  
-  idx <- (i - 1) / step_size + 1
-  if (length(xtest) == forecast_horizon) {
-    rmse1[idx, 1:forecast_horizon] <- sqrt((fcast1$mean - xtest)^2)
-    rmse2[idx, 1:forecast_horizon] <- sqrt((fcast2$mean - xtest)^2)
+# Rolling-origin cross-validation for VARs against a random walk.
+cv_var <- function(Y, ps, frac = 0.7, H = 12, hs = c(1, 3, 6, 12)) {
+  n <- nrow(Y); k <- floor(n * frac); origins <- k:(n - 1)
+  res <- lapply(ps, function(p) array(NA, c(length(origins), H, ncol(Y))))
+  for (ii in seq_along(origins)) {
+    o <- origins[ii]; hh <- min(H, n - o)
+    Ytr <- ts(Y[1:o, ], frequency = frequency(Y)); Yte <- Y[(o + 1):(o + hh), , drop = FALSE]
+    for (j in seq_along(ps)) {
+      if (ps[j] == 0) fc <- matrix(rep(Y[o, ], each = hh), nrow = hh)
+      else { pr <- predict(VAR(Ytr, p = ps[j], type = "const"), n.ahead = hh)
+             fc <- sapply(pr$fcst, function(x) x[1:hh, "fcst"]); if (hh == 1) fc <- matrix(fc, nrow = 1) }
+      res[[j]][ii, 1:hh, ] <- fc - Yte
+    }
   }
+  nm <- ifelse(ps == 0, "Random walk", paste0("VAR(", ps, ")"))
+  rm <- function(e, h) sqrt(colMeans(e[, h, ]^2, na.rm = TRUE))
+  tab1 <- data.frame(Model = nm, t(sapply(res, function(e) round(rm(e, 1), 3))), check.names = FALSE)
+  tabH <- data.frame(Model = nm, t(sapply(res, function(e) round(sapply(hs, function(h) mean(rm(e, h))), 3))), check.names = FALSE)
+  names(tabH)[-1] <- paste0("h = ", hs)
+  cat(sprintf("\n\nInitial training set: %d observations. Forecast origins: %d.\n\n", k, length(origins)))
+  print(kable(tab1, row.names = FALSE, caption = "One-Step-Ahead RMSE by Variable")); cat("\n\n")
+  print(kable(tabH, row.names = FALSE, caption = "RMSE Averaged Across Variables, by Horizon")); cat("\n\n")
 }
 
-# Plotting
-plot(1:4, colMeans(rmse1, na.rm = TRUE), type = "l", col = 2, xlab = "Horizon", ylab = "RMSE", ylim = c(0, 0.2))
-lines(1:4, colMeans(rmse2, na.rm = TRUE), type = "l", col = 3)
-legend("topleft", legend = c("ARIMAX(1,0,1)", "ARIMAX(0,0,2)"), col = 2:3, lty = 1)
-```
-
-<br>
-
-### Foreasting
-
-The SARIMA model forecasts for the Federal Funds Rate and the 30-Year Treasury Yield depict stability in the near term, with an increasing range of outcomes as we move further into the future. The Fed Funds Rate is shown to have a stable past with minor fluctuations, but the forecast suggests uncertainty, implying that rates could either rise or fall. Similarly, the Treasury Yield forecast indicates relatively stable past rates but projects increasing uncertainty. This suggests that the long-term lending market could face varied conditions, potentially affecting investment, inflation, and economic growth expectations.
-
-```{r}
-ts_combined[, "FedFundsRate"] %>%
-  Arima(order = c(0, 1, 2), include.drift = TRUE) %>%
-  forecast(h=60) %>%
-  autoplot() +
-  ylab("Percentage Change") + xlab("Year") + ggtitle("Fed Funds Rate Percentage Change Prediction") + theme(panel.background = element_blank())
-```
-
-```{r}
-ts_combined[, "treasury_yield_30"] %>%
-  Arima(order = c(0, 1, 2), include.drift = TRUE) %>%
-  forecast(h=60) %>%
-  autoplot() +
-  ylab("Percentage Change") + xlab("Year") + ggtitle("30 Year Treasury Yield Percentage Change Prediction") + theme(panel.background = element_blank())
-```
-
-## VAR - Monetary Policy and Treasury Markets
-
-Variables: Fed Funds Rate, 3-Month Yield, 6-Month Yield, 1-Year Yield, 5-Year Yield, 10-Year Yield, 30-Year Yield.
-
-### Data Processing
-
-This graph illustrates the Federal Funds Rate (FFR) and various Treasury yields (ranging from 3 months to 30 years) over time. The general trend shows that Treasury yields across different maturities tend to move in the same direction as the Federal Funds Rate, with the highest yields typically associated with longer maturities.
-
-```{r}
-df_fedfunds <- read_excel('data/data/fedfunds.xlsx')
-df_fedfunds <- na.omit(df_fedfunds)
-df_fedfunds$Date <- as.Date(df_fedfunds[[1]])
-df_fedfunds$FedFundsRate <- as.numeric(df_fedfunds[[2]])
-
-df_3mon <- read_excel('data/data/3-mon-t-bill-rate.xlsx')
-df_3mon <- na.omit(df_3mon)
-df_3mon$Date <- as.Date(df_3mon[[1]])
-df_3mon$DGS3MO <- as.numeric(df_3mon[[2]])
-df_3mon <- df_3mon %>%
-  mutate(Year = year(Date), Month = month(Date)) %>%
-  group_by(Year, Month) %>%
-  summarize(t_bill_3mon_rate = mean(DGS3MO, na.rm = TRUE)) %>%
-  mutate(Date = as.Date(paste(Year, Month, "01", sep = "-")))
-
-df_6mon <- read_excel('data/data/6-mon-t-bill-rate.xlsx')
-df_6mon <- na.omit(df_6mon)
-df_6mon$Date <- as.Date(df_6mon[[1]])
-df_6mon$DGS6MO <- as.numeric(df_6mon[[2]])
-df_6mon <- df_6mon %>%
-  mutate(Year = year(Date), Month = month(Date)) %>%
-  group_by(Year, Month) %>%
-  summarize(t_bill_6mon_rate = mean(DGS6MO, na.rm = TRUE)) %>%
-  mutate(Date = as.Date(paste(Year, Month, "01", sep = "-")))
-
-df_1yr <- read_excel('data/data/1-yrs-t-bill-rate.xlsx')
-df_1yr <- na.omit(df_1yr)
-df_1yr$Date <- as.Date(df_1yr[[1]])
-df_1yr$DGS1YR <- as.numeric(df_1yr[[2]])
-df_1yr <- df_1yr %>%
-  mutate(Year = year(Date), Month = month(Date)) %>%
-  group_by(Year, Month) %>%
-  summarize(t_bill_1yr_rate = mean(DGS1YR, na.rm = TRUE)) %>%
-  mutate(Date = as.Date(paste(Year, Month, "01", sep = "-")))
-
-df_5yr <- read_excel('data/data/5-yrs-t-bill-rate.xlsx')
-df_5yr <- na.omit(df_5yr)
-df_5yr$Date <- as.Date(df_5yr[[1]])
-df_5yr$DGS5 <- as.numeric(df_5yr[[2]])
-df_5yr <- df_5yr %>%
-  mutate(Year = year(Date), Month = month(Date)) %>%
-  group_by(Year, Month) %>%
-  summarize(treasury_yield_5 = mean(DGS5, na.rm = TRUE)) %>%
-  mutate(Date = as.Date(paste(Year, Month, "01", sep = "-")))
-
-df_10yr <- read_excel('data/data/10-yrs-t-bill-yield.xlsx')
-df_10yr <- na.omit(df_10yr)
-df_10yr$Date <- as.Date(df_10yr[[1]])
-df_10yr$DGS10 <- as.numeric(df_10yr[[2]])
-df_10yr <- df_10yr %>%
-  mutate(Year = year(Date), Month = month(Date)) %>%
-  group_by(Year, Month) %>%
-  summarize(treasury_yield_10 = mean(DGS10, na.rm = TRUE)) %>%
-  mutate(Date = as.Date(paste(Year, Month, "01", sep = "-")))
-
-df_30yr <- read_excel('data/data/30-yrs-t-bill-yield.xlsx')
-df_30yr <- na.omit(df_30yr)
-df_30yr$Date <- as.Date(df_30yr[[1]])
-df_30yr$DGS30 <- as.numeric(df_30yr[[2]])
-df_30yr <- df_30yr %>%
-  mutate(Year = year(Date), Month = month(Date)) %>%
-  group_by(Year, Month) %>%
-  summarize(treasury_yield_30 = mean(DGS30, na.rm = TRUE)) %>%
-  mutate(Date = as.Date(paste(Year, Month, "01", sep = "-")))
-```
-
-```{r}
-df_combined <- merge(df_fedfunds, df_3mon, by = "Date", all = TRUE)
-df_combined <- merge(df_combined, df_6mon, by = "Date", all = TRUE)
-df_combined <- merge(df_combined, df_1yr, by = "Date", all = TRUE)
-df_combined <- merge(df_combined, df_5yr, by = "Date", all = TRUE)
-df_combined <- merge(df_combined, df_10yr, by = "Date", all = TRUE)
-df_combined <- merge(df_combined, df_30yr, by = "Date", all = TRUE)
-df_combined <- df_combined[, c(1,4,7,10,13,16,19,22)]
-df_combined <- na.omit(df_combined)
-colnames(df_combined) <- c("Date", "FFR", "T3Mon", "T6Mon", "T1Yr", "T5Yr", "T10Yr", "T30Yr")
-ts_combined <- ts(data = df_combined[df_combined$Date >= as.Date("1982-01-01"), -1],  # Exclude the Date column
-                  start = c(year(as.Date("1982-01-01")), month(as.Date("1982-01-01"))),
-                  frequency = 12)
-autoplot(ts_combined) + 
-    ggtitle("Federal Funds Rate and Treasury Yields Over Time") +
-    xlab("Year") + 
-    ylab("Values") + 
-    theme(panel.background = element_blank())
-```
-
-The pairplot indicates a generally positive correlation among all interest rate variables, from the Fed Funds Rate to the 30-Year Yield---when one goes up, others often do too. The time series plot shows how these rates have moved over time, sometimes in sync, reflecting similar economic forces, and sometimes diverging due to different market expectations for the short and long term.
-
-```{r}
-pairs(cbind(FedFundsRate=df_combined$FFR, T3Mon=df_combined$T3Mon, T6Mon=df_combined$T6Mon, T1Yr=df_combined$T1Yr, T5Yr=df_combined$T5Yr, T10Yr=df_combined$T10Yr, T30Yr=df_combined$T30Yr))
-plot.ts(ts_combined, main = "Time Series Plot", xlab = "Time")
-```
-
-<br>
-
-### Model Fitting
-
-#### **VAR Selection**
-
-```{r}
-cat("VAR Model Lag Value Selection:\n")
-VARselect <- VARselect(ts_combined, lag.max=10, type="both")
-VARselect$selection
-```
-
-<br>
-
-#### **VAR(1)**
-
-The `VAR(1)` model analysis underscores the significant economic impact of the Federal Funds Rate (FFR) on various Treasury yields. It shows how changes in the FFR ripple through both short-term and long-term interest rates, influencing the entire yield curve. **Short-term rates respond quickly to monetary policy shifts, while long-term rates reflect market expectations about future economic trends.** This interconnection highlights the far-reaching effects of central bank policies on different aspects of the economy, from consumer borrowing to long-term investments.
-
-```{r}
-summary(fit1 <- vars::VAR(ts_combined, p=1, type=c('both')))
-```
-
-<br>
-
-#### **VAR(2)**
-
-The `VAR(2)` model's analysis shows how changes in the FFR, a key monetary policy tool, not only have immediate impacts but also exert influence over longer periods through their interactions with short-term and long-term yields. These interdependencies between different segments of the yield curve are crucial for understanding market expectations and economic conditions.
-
-```{r}
-summary(fit2 <- vars::VAR(ts_combined, p=2, type="both"))
-```
-
-<br>
-
-### Cross Validation
-
-The plots compare the cross-validation RMSE for `VAR(1)` and `VAR(2`) models across different financial variables over time. The consistently lower RMSE values for `VAR(1)` indicate that it provides a better fit or more accurate forecasts for these series.
-
-```{r}
-n <- nrow(ts_combined)
-k <- round(n * 0.7)
-forecast_horizon <- 5
-
-rmse1 <- matrix(NA, n - k - forecast_horizon + 1, 7)
-rmse2 <- matrix(NA, n - k - forecast_horizon + 1, 7)
-
-for (i in 1:(n - k - forecast_horizon + 1)) {
-  xtrain <- ts_combined[1:(k + i - 1), ]
-  xtest <- ts_combined[(k + i):(k + i + forecast_horizon - 1), ]
-
-  fcast1 <- predict(fit1, n.ahead = forecast_horizon)
-  fcast2 <- predict(fit2, n.ahead = forecast_horizon)
-
-  for (j in 1:7) {
-    rmse1[i, j] <- sqrt(mean((fcast1$fcst[[j]][1:forecast_horizon, 1] - xtest[, j])^2))
-    rmse2[i, j] <- sqrt(mean((fcast2$fcst[[j]][1:forecast_horizon, 1] - xtest[, j])^2))
-  }
+# Granger-causality table: the joint test from the full VAR and the two
+# directions of each bivariate VAR at the same lag order.
+granger_tab <- function(Y, p, cause = "FFR") {
+  full <- VAR(Y, p = p, type = "const")
+  rows <- lapply(setdiff(colnames(Y), cause), function(v) {
+    bv <- VAR(Y[, c(cause, v)], p = p, type = "const")
+    data.frame(Variable = v,
+               `FFR causes variable` = fmt_p(causality(bv, cause = cause)$Granger$p.value),
+               `Variable causes FFR` = fmt_p(causality(bv, cause = v)$Granger$p.value), check.names = FALSE) })
+  cat(sprintf("Joint test in the full VAR(%d), FFR does not Granger-cause the other variables: F = %.2f, p %s\n\n",
+              p, causality(full, cause = cause)$Granger$statistic, fmt_p(causality(full, cause = cause)$Granger$p.value)))
+  kable(do.call(rbind, rows), row.names = FALSE, caption = sprintf("Bivariate Granger Tests, VAR(%d), p-values", p))
 }
 
-avg_rmse1 <- colMeans(rmse1, na.rm = TRUE)
-avg_rmse2 <- colMeans(rmse2, na.rm = TRUE)
-
-start_date <- as.Date("1982-01-01")
-end_date <- as.Date("2023-08-01")
-dates <- seq(start_date, end_date, by = "month")
-years <- format(dates, "%Y")
-
-
-rmse_df <- data.frame(
-  Year = rep(years, each = 7),
-  Variable = rep(colnames(ts_combined), times = length(years)),
-  RMSE_VAR1 = as.vector(t(avg_rmse1)),
-  RMSE_VAR2 = as.vector(t(avg_rmse2))
-)
-
-rmse_melted <- melt(rmse_df, id.vars = c("Year", "Variable"), variable.name = "Model", value.name = "RMSE")
-
-ggplot(rmse_melted, aes(x = Year, y = RMSE, color = Model, group = Variable)) + 
-  geom_line() +
-  facet_wrap(~ Variable, scales = "free_y") +
-  labs(title = "Cross-Validation RMSE for VAR(1) and VAR(2) by Variable", x = "Year", y = "RMSE")  + 
-    theme(panel.background = element_blank())
-```
-
-<br>
-
-### Forecasting
-
-The forecast plots generated from the `VAR(1)` model for various interest rates, including the Fed Funds Rate and various Treasury yields, present a detailed picture of expected movements and uncertainties within the financial market. These plots suggest that each interest rate may follow a different path in the future, yet they are all interrelated. Typically, the Fed Funds Rate, which is set by the Federal Reserve, influences the other yields, as it reflects the cost of borrowing funds overnight. Treasury yields of different maturities react to this benchmark rate but also incorporate market expectations for inflation and economic growth over various horizons. The plots show that while forecasts are made for each rate individually, the market's future expectations for each can diverge due to different influencing factors, including policy decisions, economic outlook, and investor sentiment.
-
-```{r}
-var <- VAR(ts_combined, p=1, type="both")
-forecast_plot <- var %>% forecast(h=100) %>% autoplot() + xlab("Year") + theme(panel.background = element_blank())
-ggsave("forecast_plot.png", plot = forecast_plot, width = 8, height = 16)
-```
-
-![](forecast_plot.png)
-
-## VAR - Monetary Policy and Macroeconomic Indicators
-
-Variables: FFR, GDP, Unemployment Rate, CPI, 30-Year Mortgage Rate
-
-### Data Processing
-
-```{r}
-df_fedfunds <- read_excel('data/data/fedfunds.xlsx')
-df_fedfunds <- na.omit(df_fedfunds)
-df_fedfunds$Date <- as.Date(df_fedfunds[[1]])
-df_fedfunds$FedFundsRate <- as.numeric(df_fedfunds[[2]])
-
-df_gdp <- read_excel('data/data/GDP.xlsx')
-df_gdp <- na.omit(df_gdp)
-df_gdp$Date <- as.Date(df_gdp[[1]])
-df_gdp$GDP <- as.numeric(df_gdp[[2]])
-start_date <- min(df_gdp$Date)
-end_date <- max(df_gdp$Date)
-monthly_dates <- seq(from = start_date, to = end_date, by = "month")
-df_gdp_interpolated <- data.frame(Date = monthly_dates)
-df_gdp_interpolated$GDP <- approx(df_gdp$Date, df_gdp$GDP, df_gdp_interpolated$Date, method = "linear")$y
-df_gdp <- df_gdp_interpolated
-
-df_ump <- read_excel('data/data/unemploy.xlsx')
-df_ump <- na.omit(df_ump)
-df_ump$Date <- as.Date(df_ump[[1]])
-df_ump$UMP <- as.numeric(df_ump[[2]])
-
-df_cpi <- read_excel('data/data/cpi-u.xlsx')
-df_cpi <- na.omit(df_cpi)
-df_cpi$Date <- as.Date(df_cpi[[1]])
-df_cpi$CPI <- as.numeric(df_cpi[[2]])
-
-df_mort <- read_excel('data/data/30-yrs-mortgage-rate.xlsx')
-df_mort <- na.omit(df_mort)
-df_mort$Date <- as.Date(df_mort[[1]])
-df_mort$MORT <- as.numeric(df_mort[[2]])
-df_mort <- df_mort %>%
-  mutate(Year = year(Date), Month = month(Date)) %>%
-  group_by(Year, Month) %>%
-  summarize(MORT = mean(MORT)) %>%
-  mutate(Date = as.Date(paste(Year, Month, "01", sep = "-")))
-```
-
-```{r}
-df_combined <- merge(df_fedfunds, df_gdp, by = "Date", all = TRUE)
-df_combined <- merge(df_combined, df_ump, by = "Date", all = TRUE)
-df_combined <- merge(df_combined, df_cpi, by = "Date", all = TRUE)
-df_combined <- merge(df_combined, df_mort, by = "Date", all = TRUE)
-df_combined <- df_combined[, c(1,4,5,8,11,14)]
-df_combined <- na.omit(df_combined)
-colnames(df_combined) <- c("Date", "FFR", "GDP", "UMP", "CPI", "MORT")
-ts_combined <- ts(data = df_combined[df_combined$Date >= as.Date("1971-04-01"), -1],
-                  start = c(year(as.Date("1971-04-01")), month(as.Date("1971-04-01"))),
-                  frequency = 12)
-```
-
-The pair plot illustrates the disparity in scales among different economic indicators, making it difficult to discern relationships directly due to the dominance of variables like GDP. The time series plot reveals distinct trends over time, such as the steady increase in GDP and the cyclical nature of the unemployment rate, alongside the long-term rise in CPI and the decline in the mortgage rate.
-
-```{r}
-pairs(df_combined[, c("FFR", "GDP", "UMP", "CPI", "MORT")])
-plot.ts(ts_combined, main = "Time Series Plot", xlab = "Time")
-```
-
-<br>
-
-### Model Fitting
-
-The progression from VAR(1) through VAR(3), VAR(7), to VAR(10) models shows an evolving understanding of the interrelationships among the key economic indicators: Federal Funds Rate, Gross Domestic Product, Unemployment Rate, Consumer Price Index, and 30-Year Mortgage Rate.
-
-In all models, the persistent influence of FFR on MORT is evident, highlighting the impact of monetary policy on long-term interest rates. The GDP equations across these models consistently show its own past values as significant predictors, indicating economic growth's self-sustaining nature.
-
-As the lag order increases, the models reveal more complex dynamics. For example, the VAR(10) model captures longer-term influences, showing how variables like UMP and CPI impact others over extended periods. However, with higher-order VAR models, the risk of overfitting increases, and some coefficients may become statistically insignificant, suggesting that not all lagged values meaningfully contribute to the model.
-
-The overall fit of the model improves with higher lag orders, as seen in the increasing R-squared values, but this comes with the trade-off of increased complexity and potential redundancy in lagged terms. The choice of the model should balance the complexity with interpretability and the specific requirements of the analysis.
-
-<br>
-
-#### **VAR Selection**
-
-```{r}
-cat("VAR Model Lag Value Selection:\n")
-VARselect <- VARselect(ts_combined, lag.max=20, type="both")
-VARselect$selection
-```
-
-<br>
-
-#### **VAR(1)**
-
-```{r}
-summary(fit1 <- vars::VAR(ts_combined, p=1, type=c('both')))
-```
-
-<br>
-
-#### **VAR(3)**
-
-```{r}
-summary(fit3 <- vars::VAR(ts_combined, p=3, type="both"))
-```
-
-<br>
-
-#### **VAR(7)**
-
-```{r}
-summary(fit7 <- vars::VAR(ts_combined, p=7, type="both"))
-```
-
-<br>
-
-#### **VAR(10)**
-
-```{r}
-summary(fit10 <- vars::VAR(ts_combined, p=10, type="both"))
-```
-
-<br>
-
-#### **Hyperparameter Optimization**
-
-```{r}
-p <- c(1, 3, 7, 10)
-
-temp <- data.frame()
-ls <- matrix(NA, nrow = 10, ncol = 3)
-for (i in 1:length(p)) {
-    fitvar <- vars::VAR(ts_combined, p = p[i], type = "both")
-    aic_val <- AIC(fitvar)
-    bic_val <- BIC(fitvar)
-    ls[i, ] <- c(p[i], aic_val, bic_val)
+# Impulse responses to an orthogonalised one-standard-deviation FFR shock.
+irf_plot <- function(fit, n.ahead, unit, xlab) {
+  ir <- irf(fit, impulse = "FFR", n.ahead = n.ahead, ortho = TRUE, boot = TRUE, runs = 200, seed = 1)
+  long <- do.call(rbind, lapply(colnames(ir$irf$FFR), function(v)
+    data.frame(Variable = factor(v, levels = colnames(ir$irf$FFR)), h = 0:n.ahead,
+               irf = ir$irf$FFR[, v], lo = ir$Lower$FFR[, v], hi = ir$Upper$FFR[, v])))
+  p <- ggplot(long, aes(h, irf)) + geom_ribbon(aes(ymin = lo, ymax = hi), fill = "grey80") +
+    geom_line() + geom_hline(yintercept = 0, linetype = 2) + facet_wrap(~ Variable, scales = "free_y") +
+    ggtitle("Response to a One-Standard-Deviation Federal Funds Rate Shock") + xlab(xlab) + ylab(unit)
+  print(p)
+  invisible(ir)
 }
 
-temp <- as.data.frame(ls)
-names(temp) <- c("p", "AIC", "BIC")
-
-aic_row <- paste("Model fitting with minimum AIC:\n", toString(temp[which.min(temp$AIC), ]))
-bic_row <- paste("\nModel fitting with minimum BIC:\n", toString(temp[which.min(temp$BIC), ]))
-all_rows <- paste(aic_row, bic_row, sep="\n")
-cat(all_rows)
-```
-
-<br>
-
-### Cross Validation
-
-The plots compare the cross-validation RMSE for `VAR(3)` and `VAR(10`) models across different financial variables over time. The consistently lower RMSE values for `VAR(1)` indicate that it provides a better fit or more accurate forecasts for these series.
-
-```{r}
-n <- nrow(ts_combined)
-k <- round(n * 0.7)
-forecast_horizon <- 5
-
-rmse1 <- matrix(NA, n - k - forecast_horizon + 1, 5)
-rmse2 <- matrix(NA, n - k - forecast_horizon + 1, 5)
-
-for (i in 1:(n - k - forecast_horizon + 1)) {
-  xtrain <- ts_combined[1:(k + i - 1), ]
-  xtest <- ts_combined[(k + i):(k + i + forecast_horizon - 1), ]
-
-  fcast1 <- predict(fit3, n.ahead = forecast_horizon)
-  fcast2 <- predict(fit10, n.ahead = forecast_horizon)
-
-  for (j in 1:5) {
-    rmse1[i, j] <- sqrt(mean((fcast1$fcst[[j]][1:forecast_horizon, 1] - xtest[, j])^2))
-    rmse2[i, j] <- sqrt(mean((fcast2$fcst[[j]][1:forecast_horizon, 1] - xtest[, j])^2))
-  }
+# VAR forecast with 80% and 95% bands, panels in variable order, recent history only.
+var_fc_plot <- function(fit, h, from, title, unit) {
+  Y <- fit$y; tt <- time(Y); vars_ <- colnames(Y)
+  pr80 <- predict(fit, n.ahead = h, ci = 0.80); pr95 <- predict(fit, n.ahead = h, ci = 0.95)
+  step <- 1 / frequency(Y); tf <- max(tt) + step * (1:h)
+  hist <- do.call(rbind, lapply(vars_, function(v) data.frame(Variable = v, t = as.numeric(tt), y = as.numeric(Y[, v]))))
+  fc <- do.call(rbind, lapply(vars_, function(v) data.frame(Variable = v, t = tf, y = pr95$fcst[[v]][, "fcst"],
+                 lo95 = pr95$fcst[[v]][, "lower"], hi95 = pr95$fcst[[v]][, "upper"], lo80 = pr80$fcst[[v]][, "lower"], hi80 = pr80$fcst[[v]][, "upper"])))
+  hist$Variable <- factor(hist$Variable, levels = vars_); fc$Variable <- factor(fc$Variable, levels = vars_)
+  ggplot() + geom_ribbon(data = fc, aes(t, ymin = lo95, ymax = hi95), fill = "grey85") +
+    geom_ribbon(data = fc, aes(t, ymin = lo80, ymax = hi80), fill = "grey65") +
+    geom_line(data = hist[hist$t >= from, ], aes(t, y)) + geom_line(data = fc, aes(t, y), colour = "steelblue4") +
+    facet_wrap(~ Variable, scales = "free_y") + scale_x_continuous(breaks = function(l) seq(ceiling(l[1]), floor(l[2]), by = 2)) +
+    ggtitle(title) + xlab("Year") + ylab(unit)
 }
-
-avg_rmse1 <- colMeans(rmse1, na.rm = TRUE)
-avg_rmse2 <- colMeans(rmse2, na.rm = TRUE)
-
-start_date <- as.Date("1971-04-01")
-end_date <- as.Date("2023-04-01")
-dates <- seq(start_date, end_date, by = "month")
-years <- format(dates, "%Y")
-
-
-rmse_df <- data.frame(
-  Year = rep(years, each = 5),
-  Variable = rep(colnames(ts_combined), times = length(years)),
-  RMSE_VAR3 = as.vector(t(avg_rmse1)),
-  RMSE_VAR10 = as.vector(t(avg_rmse2))
-)
-
-rmse_melted <- melt(rmse_df, id.vars = c("Year", "Variable"), variable.name = "Model", value.name = "RMSE")
-
-ggplot(rmse_melted, aes(x = Year, y = RMSE, color = Model, group = Variable)) + 
-  geom_line() +
-  facet_wrap(~ Variable, scales = "free_y") +
-  labs(title = "Cross-Validation RMSE for VAR(3) and VAR(10) by Variable", x = "Year", y = "RMSE")  + 
-    theme(panel.background = element_blank())
 ```
 
-<br>
+***
+### Purpose
 
-### Forecasting
+This section adds the Federal Funds Rate to the univariate models of the previous section, in two ways. The first two models are regressions with ARMA errors, the ARIMAX form: a target series is regressed on the Federal Funds Rate and the regression residuals are modelled as an ARMA process, so that the coefficient on the policy rate is estimated with the autocorrelation of the target accounted for. The targets are monthly CPI inflation and the monthly change in the 30-year Treasury yield. The last two models are vector autoregressions, in which the Federal Funds Rate is one variable in a system and every variable is explained by the lagged values of all of them. The first VAR covers the Treasury yield curve; the second covers output, prices, unemployment and the mortgage rate.
 
-The VAR(3) model forecasts for key economic indicators suggest a tightening monetary environment, with rising Federal Funds Rates potentially in response to upward inflationary trends indicated by the Consumer Price Index. Consistent economic growth is anticipated, as evidenced by the steady increase in GDP, though the projection comes with increasing uncertainty. The sharp uptick in forecasted 30-Year Mortgage Rates could dampen housing market activity by raising borrowing costs. Meanwhile, the expected rise in the unemployment rate signals possible headwinds for the labor market, which may require targeted economic policies to mitigate the risk of a slowdown and support job growth.
+The two approaches differ in what they assume about the policy rate. A regression treats it as exogenous, set without regard to the target. That is defensible for the 30-year yield, which the Federal Reserve does not target, and it is not defensible for inflation, which the Federal Reserve responds to. The inflation regression therefore uses the policy rate lagged twelve months, so that the regressor is fixed before the target is observed, and its coefficient is read as a forecasting relationship rather than a causal one. The VARs make no exogeneity assumption; their Granger-causality tests and impulse responses are the results in this section that speak to the effect of the policy rate.
+
+Model selection follows the previous section: a grid of ARMA orders ranked by AIC, AICc and BIC, compared with `auto.arima` [@hyndman2008]; coefficient tables and Ljung-Box tests; rolling-origin cross-validation. For the ARIMAX models the cross-validation compares each model with the same ARMA model without the regressor, which is the test of whether the policy rate adds forecasting information. The VARs are estimated with the `vars` package [@pfaff2008].
+
+## ARIMAX: Inflation and the Federal Funds Rate
+
+### Data
+
+Inflation is the monthly change in the log of `CPIAUCSL`, multiplied by 100, so a value of 0.30 is a 0.30% rise in the index over the month, about 3.6% at an annual rate. The regressor is the effective Federal Funds Rate, `FEDFUNDS`, lagged twelve months. Both series are monthly; after the lag the sample runs from July 1955 to August 2023, 818 observations.
 
 ```{r}
-var <- VAR(ts_combined, p=3, type="both")
-forecast_plot1 <- var %>% forecast(h=100) %>% autoplot() + xlab("Year") + theme(panel.background = element_blank())
-ggsave("forecast_plot1.png", plot = forecast_plot1, width = 8, height = 16)
+ff <- rd("fedfunds.xlsx"); cpi <- rd("cpi-u.xlsx")
+m <- merge(ff, cpi, by = "Date"); names(m) <- c("Date", "ffr", "cpi")
+m$infl <- c(NA, 100 * diff(log(m$cpi))); m$dffr <- c(NA, diff(m$ffr))
+m$ffr_l12 <- dplyr::lag(m$ffr, 12); m$ffr_l1 <- dplyr::lag(m$ffr, 1)
+d1 <- m[complete.cases(m), ]
+infl <- ts(d1$infl, start = c(year(d1$Date[1]), month(d1$Date[1])), frequency = 12)
+X1 <- as.matrix(d1[, c("ffr_l12", "ffr_l1")])
+autoplot(ts(d1[, c("infl", "ffr")], start = start(infl), frequency = 12), facets = TRUE) +
+  ggtitle("Monthly CPI Inflation and the Federal Funds Rate") + xlab("Year") + ylab("% per month (top), % (bottom)")
 ```
 
-![](forecast_plot1.png)
+### Stationarity
+
+```{r}
+adf_line(infl, "Monthly inflation"); adf_line(d1$ffr, "Federal Funds Rate, level"); adf_line(d1$dffr, "Federal Funds Rate, change")
+k <- suppressWarnings(kpss.test(infl)); cat(sprintf("%-34s KPSS statistic %6.2f   p-value %s\n", "Monthly inflation", k$statistic, ifelse(k$p.value <= 0.01, "< 0.01", sprintf("%.3f", k$p.value))))
+```
+
+Monthly inflation rejects the unit root, with an ADF statistic of −3.73 and p = 0.023, and is modelled in levels. It is persistent: the ACF is 0.61 at lag one and stays near 0.40 through lag eleven, and the KPSS test rejects level stationarity, which is the usual verdict on a series with a slowly shifting mean. The Federal Funds Rate does not reject the unit root in levels on this sample (statistic −3.12, p = 0.105) and is used as a lagged level in the regression, where the question is whether its past value helps predict inflation; the change in the rate is used as an alternative regressor below. The ACF of inflation also shows a spike at lag twelve, 0.30, which is what remains of the seasonal pattern after the Bureau of Labor Statistics' adjustment; seasonal autoregressive terms are included in the grid for that reason.
+
+```{r fig.width=9, fig.height=3}
+gridExtra::grid.arrange(ggAcf(infl, 36) + ggtitle("ACF, Monthly Inflation"), ggPacf(infl, 36) + ggtitle("PACF, Monthly Inflation"), nrow = 1)
+```
+
+### Model Selection
+
+The grid covers ARMA error orders p and q from 0 to 3 and seasonal autoregressive order P from 0 to 2, 48 models, each with the twelve-month lag of the Federal Funds Rate as regressor.
+
+```{r}
+g1 <- grid_x(infl, X1[, "ffr_l12", drop = FALSE], Pmax = 2)
+kable(head(g1, 6), row.names = FALSE, caption = "Six Lowest-AICc Error Structures, Regressor FFR Lagged 12 Months")
+kable(head(g1[order(g1$BIC), ], 3), row.names = FALSE, caption = "Three Lowest-BIC Error Structures")
+cat("auto.arima, same regressor:\n"); auto.arima(infl, xreg = X1[, "ffr_l12", drop = FALSE])
+```
+
+AICc selects `ARMA(3,2)(2,0,0)[12]` errors; BIC selects `ARMA(2,1)(2,0,0)[12]`, 4.4 points behind on AIC with two fewer parameters. Every model in the top six has two seasonal autoregressive terms. `auto.arima` with the same regressor selects the same model as AICc. The BIC model is retained; the AICc model is shown for comparison.
+
+### Diagnostics
+
+```{r}
+fit1 <- Arima(infl, order = c(2, 0, 1), seasonal = c(2, 0, 0), xreg = X1[, "ffr_l12", drop = FALSE])
+report(fit1)
+```
+
+```{r}
+report(Arima(infl, order = c(3, 0, 2), seasonal = c(2, 0, 0), xreg = X1[, "ffr_l12", drop = FALSE]))
+```
+
+```{r}
+report(Arima(infl, order = c(2, 0, 1), seasonal = c(2, 0, 0), xreg = X1[, "ffr_l1", drop = FALSE]))
+```
+
+The coefficient on the Federal Funds Rate lagged twelve months is 0.008 with a standard error of 0.009 in the retained model and 0.009 with a standard error of 0.010 in the larger one: the policy rate a year earlier has no measurable relationship with this month's inflation once inflation's own dynamics are in the model. The third table replaces the twelve-month lag with a one-month lag. That coefficient is 0.042 with a standard error of 0.007, positive and significant, and the AIC falls by 28 points. The sign is the opposite of what monetary transmission predicts. It is the reaction function: the Federal Reserve raises the rate when inflation is high, so last month's rate is high when this month's inflation is high. A single-equation regression cannot separate the two directions, which is why the VAR later in this section is the model used for the causal question.
+
+The ARMA terms are all significant. In the retained model the Ljung-Box p-values are 0.31, 0.009 and 0.001 at lags 8, 12 and 24; in the AICc model they are 0.13, 0.18 and 0.013. Neither set of residuals is white at the annual lags, though the autocorrelations involved are small. The residual standard deviation is 0.23 points of monthly inflation, against an unconditional standard deviation of 0.31.
+
+### Cross-Validation
+
+```{r}
+#| results: asis
+cv_x(infl, X1, list(
+  list(name = "ARMA(2,1)(2,0,0)[12], no regressor", order = c(2, 0, 1), seasonal = c(2, 0, 0), x = NULL),
+  list(name = "Regressor FFR lagged 12 months",      order = c(2, 0, 1), seasonal = c(2, 0, 0), x = "ffr_l12"),
+  list(name = "Regressor FFR lagged 1 month",        order = c(2, 0, 1), seasonal = c(2, 0, 0), x = "ffr_l1"),
+  list(name = "ARMA(2,1), no seasonal terms",        order = c(2, 0, 1), seasonal = c(0, 0, 0), x = NULL)))
+```
+
+The initial training set ends in February 2003 and the models are re-estimated at each of the 246 later months, forecasting one to twelve months ahead. The twelve-month lag of the policy rate is known at every horizon, so its forecasts are genuine; the one-month lag is known only one step ahead, and its longer-horizon forecasts use the realised rate. Adding the twelve-month lag changes the one-step RMSE from 0.2877 to 0.2879 and the twelve-step RMSE from 0.335 to 0.336: no gain. The one-month lag, despite its in-sample significance, makes the forecasts worse at every horizon, 0.291 one step ahead and 0.342 at twelve. The seasonal terms are worth about 0.002 of RMSE. For forecasting monthly inflation, the policy rate adds nothing to what inflation's own history provides.
+
+### Forecast
+
+```{r}
+xf <- matrix(d1$ffr[(nrow(d1) - 11):nrow(d1)], ncol = 1, dimnames = list(NULL, "ffr_l12"))
+fc1 <- forecast(fit1, h = 12, xreg = xf)
+autoplot(fc1) + ggtitle("Monthly CPI Inflation, 12-Month Forecast") + xlab("Year") + ylab("% per month")
+```
+
+Because the regressor is lagged twelve months, the values it takes over the forecast period are the Federal Funds Rates of September 2022 to August 2023, which are known, so no assumption about future policy is needed. The forecast runs from September 2023 to August 2024. The point forecasts average 0.38% a month, 4.5% at an annual rate, against 3.6% over the twelve months to August 2023; the model carries forward the persistence of the 2021–2023 readings. The 80% interval at twelve months is 0.02 to 0.73% a month, an annual range of roughly 0 to 9%.
+
+## ARIMAX: The 30-Year Yield and the Federal Funds Rate
+
+### Data
+
+The target is the monthly change in the 30-year constant-maturity yield, `DGS30`, with the daily series averaged within each month. The regressor is the monthly change in the Federal Funds Rate. The sample runs from March 1977 to August 2023, 557 monthly changes. Both are in % points.
+
+```{r}
+y30 <- mavg("30-yrs-t-bill-yield.xlsx"); names(y30)[2] <- "y30"
+m2 <- merge(ff, y30, by = "Date"); names(m2)[2] <- "ffr"
+m2$dy <- c(NA, diff(m2$y30)); m2$dffr <- c(NA, diff(m2$ffr)); m2$dffr_l1 <- dplyr::lag(m2$dffr, 1)
+d2 <- m2[complete.cases(m2), ]
+dy30 <- ts(d2$dy, start = c(year(d2$Date[1]), month(d2$Date[1])), frequency = 12)
+X2 <- as.matrix(d2[, c("dffr", "dffr_l1")])
+autoplot(ts(m2[, c("y30", "ffr")], start = c(year(m2$Date[1]), month(m2$Date[1])), frequency = 12)) +
+  ggtitle("30-Year Treasury Yield and the Federal Funds Rate, Monthly") + xlab("Year") + ylab("%") + guides(colour = guide_legend(title = "Series"))
+```
+
+### Stationarity
+
+```{r}
+adf_line(m2$y30, "30-year yield, level"); adf_line(dy30, "30-year yield, monthly change"); adf_line(d2$dffr, "Federal Funds Rate, monthly change")
+cat(sprintf("Correlation of levels: %.3f.  Correlation of monthly changes: %.3f.  Correlation of the yield change with the previous month's FFR change: %.3f.\n", cor(m2$y30, m2$ffr), cor(d2$dy, d2$dffr), cor(d2$dy, d2$dffr_l1)))
+```
+
+The two levels are I(1) and move together over the sample, with a correlation of 0.90 that reflects the common decline from 1981 to 2020 rather than a month-to-month relationship. The monthly changes are stationary, with ADF statistics of −7.38 and −6.34, and their correlation is 0.30. The change in the yield has a lag-one autocorrelation of 0.32 and a PACF that is significant at lags 1 and 2, so an ARMA error structure is needed.
+
+```{r fig.width=9, fig.height=3}
+gridExtra::grid.arrange(ggAcf(dy30, 24) + ggtitle("ACF, Change in 30-Year Yield"), ggPacf(dy30, 24) + ggtitle("PACF, Change in 30-Year Yield"), nrow = 1)
+```
+
+### Model Selection
+
+```{r}
+g2 <- grid_x(dy30, X2[, "dffr", drop = FALSE])
+kable(head(g2, 6), row.names = FALSE, caption = "Six Lowest-AICc Error Structures, Regressor Change in FFR")
+cat("auto.arima, same regressor:\n"); auto.arima(dy30, xreg = X2[, "dffr", drop = FALSE])
+```
+
+AIC, AICc and BIC all select `MA(2)` errors, and `auto.arima` agrees. Adding the previous month's change in the Federal Funds Rate as a second regressor raises AICc by 1.9 points and its coefficient is −0.006 with p = 0.78, so it is not retained.
+
+### Diagnostics
+
+```{r}
+fit2 <- Arima(dy30, order = c(0, 0, 2), xreg = X2[, "dffr", drop = FALSE])
+report(fit2)
+```
+
+```{r}
+report(Arima(dy30, order = c(0, 0, 2)))
+```
+
+The coefficient on the change in the Federal Funds Rate is 0.126 with a standard error of 0.022: a one-point rise in the policy rate within a month is associated with a 0.13-point rise in the 30-year yield in the same month, holding the yield's own dynamics fixed. The 30-year yield is priced from expectations of short rates over three decades and a term premium, so a pass-through of about an eighth is the expected order of magnitude. The moving-average terms are 0.33 and −0.13, both significant, and the residuals pass the Ljung-Box test at lags 8, 12 and 24 (p = 0.58, 0.85 and 0.23). Removing the regressor raises the AIC by 30 points. The residual standard deviation is 0.24 points a month.
+
+### Cross-Validation
+
+```{r}
+#| results: asis
+cv_x(dy30, X2, list(
+  list(name = "MA(2), no regressor",                order = c(0, 0, 2), seasonal = c(0, 0, 0), x = NULL),
+  list(name = "Regressor change in FFR",            order = c(0, 0, 2), seasonal = c(0, 0, 0), x = "dffr"),
+  list(name = "Regressors change in FFR and its lag", order = c(0, 0, 2), seasonal = c(0, 0, 0), x = c("dffr", "dffr_l1")),
+  list(name = "No change (random walk in the level)", order = c(0, 0, 0), seasonal = c(0, 0, 0), x = NULL)))
+```
+
+The initial training set ends in July 2009 and there are 168 forecast origins. The regressor's forecasts are conditional on the realised change in the policy rate, so they measure how much knowing the Federal Reserve's move would have helped, not what a forecaster could have achieved. On that basis the regressor lowers the one-step RMSE from 0.163 to 0.161 and the twelve-step RMSE from 0.176 to 0.172, a gain of 1 to 2%. The random walk, which forecasts no change, has a one-step RMSE of 0.176. The lagged regressor adds nothing. The improvement from the policy rate is real and small, consistent with the coefficient of 0.13 and a correlation of 0.30 between the two monthly changes.
+
+### Forecast
+
+```{r}
+xf2 <- matrix(0, nrow = 12, ncol = 1, dimnames = list(NULL, "dffr"))
+fc2 <- forecast(fit2, h = 12, xreg = xf2)
+autoplot(fc2) + ggtitle("Monthly Change in the 30-Year Yield, 12-Month Forecast, FFR Unchanged") + xlab("Year") + ylab("% points")
+```
+
+A forecast of the yield change requires an assumption about the policy rate. The one shown holds the Federal Funds Rate at its August 2023 level, so the regressor is zero throughout. Under that assumption the forecast change is within 0.01 of zero from the third month, and the 80% interval is about ±0.3 points a month: the model's information about the direction of long yields is exhausted within two months, after which the forecast is the level as of August 2023, 4.28%.
+
+## VAR: The Federal Funds Rate and the Treasury Curve
+
+### Data
+
+Seven monthly series from January 1982 to August 2023, 500 months: the effective Federal Funds Rate and Treasury yields at 3 months, 6 months, 1 year, 5 years, 10 years and 30 years. The four short-maturity yields are reconstructed from the spread series described on the data page by adding the Federal Funds Rate back to the monthly average spread; since the monthly `FEDFUNDS` value is itself the average of the daily effective rate, the sum is the monthly average yield up to the difference between trading-day and calendar-day averaging. The 10- and 30-year yields are monthly averages of the daily constant-maturity series. All are in %.
+
+```{r}
+sp <- c(T3M = "3-mon-t-bill-rate.xlsx", T6M = "6-mon-t-bill-rate.xlsx", T1Y = "1-yrs-t-bill-rate.xlsx", T5Y = "5-yrs-t-bill-rate.xlsx")
+yl <- c(T10Y = "10-yrs-t-bill-yield.xlsx", T30Y = "30-yrs-t-bill-yield.xlsx")
+mv <- ff; names(mv)[2] <- "FFR"
+for (nm in names(sp)) { d <- mavg(sp[[nm]]); names(d)[2] <- nm; mv <- merge(mv, d, by = "Date") }
+for (nm in names(yl)) { d <- mavg(yl[[nm]]); names(d)[2] <- nm; mv <- merge(mv, d, by = "Date") }
+for (nm in names(sp)) mv[[nm]] <- mv[[nm]] + mv$FFR
+Yc <- ts(as.matrix(mv[, -1]), start = c(year(mv$Date[1]), month(mv$Date[1])), frequency = 12)
+autoplot(Yc) + ggtitle("Federal Funds Rate and Treasury Yields, Monthly") + xlab("Year") + ylab("%") + guides(colour = guide_legend(title = "Series"))
+```
+
+```{r}
+adf_c <- t(sapply(colnames(Yc), function(v) c(Level = unname(suppressWarnings(adf.test(Yc[, v]))$statistic), `First difference` = unname(suppressWarnings(adf.test(diff(Yc[, v])))$statistic))))
+kable(data.frame(Series = colnames(Yc), round(adf_c, 2), `Correlation with FFR` = round(cor(Yc)[, "FFR"], 3), check.names = FALSE), row.names = FALSE, caption = "ADF Statistics and Correlation with the Federal Funds Rate")
+```
+
+Every series fails to reject the unit root in levels at the 5% level except the 30-year yield (statistic −3.66), and every first difference rejects it. The exploratory analysis found that the spreads between these yields and the policy rate are stationary. Yields that are individually I(1) with stationary spreads are cointegrated, and the textbook model for such a system is a vector error-correction model. The VAR here is estimated in levels. A levels VAR on cointegrated series gives consistent estimates of the coefficients, impulse responses and forecasts [@sims1990], at the cost of not imposing the long-run restrictions a VECM would; it is used because the questions asked of it, which variables lead which and how a policy shock propagates along the curve, do not require those restrictions. The deterministic term is a constant only: interest rates do not trend deterministically, and a linear trend term would extrapolate the 1982–2020 decline.
+
+### Lag Selection
+
+```{r}
+vs_c <- VARselect(Yc, lag.max = 12, type = "const")
+kable(data.frame(Criterion = c("AIC", "HQ", "SC (BIC)", "FPE"), `Selected lag` = as.integer(vs_c$selection), check.names = FALSE), row.names = FALSE, caption = "Lag Order Selected by Each Criterion, Maximum 12")
+kable(round(vs_c$criteria[1:3, 1:6], 2), caption = "AIC, HQ and SC by Lag Order, Lags 1 to 6")
+```
+
+All four criteria select two lags. `VAR(2)` has 7 equations with 15 coefficients each. The largest root of its companion matrix is 0.978, inside the unit circle, and the equations' R² are all above 0.99, which is the persistence of the levels rather than explanatory power.
+
+```{r}
+var_c <- VAR(Yc, p = 2, type = "const")
+cat(sprintf("VAR(2): %d equations, %d coefficients each, %d observations. Largest root %.3f.\n", ncol(Yc), ncol(Yc) * 2 + 1, nobs(var_c$varresult$FFR), max(vars::roots(var_c))))
+st <- serial.test(var_c, lags.pt = 24, type = "PT.asymptotic")
+cat(sprintf("Portmanteau test for residual autocorrelation to lag 24: statistic %.1f, p %s.\n", st$serial$statistic, fmt_p(st$serial$p.value)))
+```
+
+The portmanteau test rejects the absence of residual autocorrelation. With 49 cross-equation autocorrelations at each lag the test has power against small residual dependence, and the lag-selection criteria did not favour a longer lag; the result is noted and the model is used as selected.
+
+### Granger Causality
+
+```{r}
+granger_tab(Yc, 2)
+```
+
+The joint test rejects: the Federal Funds Rate helps predict the yield curve. The bivariate tests show where. The policy rate Granger-causes the 3-month, 6-month and 1-year yields, with p-values below 0.02, and does not Granger-cause the 5-, 10- or 30-year yields, with p-values of 0.13, 0.33 and 0.46. In the other direction, every yield Granger-causes the Federal Funds Rate, with p-values below 0.003 at all six maturities. The pattern is what the term structure implies. Short yields are averages of expected policy rates over the next months, so the policy rate and the short yields predict each other. Long yields embody expectations of policy years ahead, so they anticipate the policy rate, but last month's policy rate carries no information about the 30-year yield beyond what the 30-year yield already contains.
+
+### Impulse Responses
+
+```{r fig.width=9, fig.height=6}
+#| results: asis
+ir_c <- irf_plot(var_c, 24, "% points", "Months after shock")
+irt <- data.frame(Series = colnames(Yc), t(sapply(colnames(Yc), function(v) round(ir_c$irf$FFR[c(1, 4, 7, 13, 25), v], 3))), check.names = FALSE)
+names(irt)[-1] <- paste0("h = ", c(0, 3, 6, 12, 24))
+fe_c <- fevd(var_c, n.ahead = 24)
+irt$`FEVD share at h = 12, %` <- sapply(fe_c, function(x) round(100 * x[12, "FFR"], 1))
+cat("\n\n"); print(kable(irt, row.names = FALSE, caption = "Response to a One-Standard-Deviation FFR Shock, % Points, and Share of Forecast-Error Variance Due to FFR Shocks")); cat("\n\n")
+```
+
+The shock is orthogonalised with the Federal Funds Rate ordered first, so it is the part of the month's movement in the policy rate not explained by the system's past, and the yields are allowed to respond within the month. Its size is 0.21 points. The bands are 95% bootstrap intervals from 200 replications.
+
+The response is largest at the short end and declines with maturity at every horizon. On impact the 3-month yield rises 0.16 points, three-quarters of the shock, the 5-year 0.09 and the 30-year 0.05. The responses build for several months as the policy rate itself continues to rise, since the Federal Reserve moves in sequences: the policy rate peaks at 0.29 points above baseline after three months. At twelve months the 3-month yield is 0.21 points above baseline, 92% of the policy rate's own response, and the 30-year is 0.11, 49%. The 30-year response is still significant at 24 months. Policy-rate shocks account for 54% of the twelve-month forecast-error variance of the policy rate, 44% for the 3-month yield, and 13% for the 30-year, whose variance is dominated by its own shocks.
+
+### Cross-Validation
+
+```{r}
+#| results: asis
+cv_var(Yc, c(0, 1, 2, 4), H = 12)
+```
+
+The initial training set ends in February 2011 and there are 150 forecast origins. `VAR(2)` beats the random walk one step ahead for the policy rate, 0.115 against 0.163, and for the yields out to one year, 0.156 to 0.159 against 0.166 to 0.171; for the 5-, 10- and 30-year yields it is no better than the random walk, 0.18 to 0.20 for both. Averaged across variables the VAR's advantage over the random walk is 6% one step ahead and 2% at twelve months. `VAR(4)` is within 0.01 of `VAR(2)` at every horizon; `VAR(1)` is slightly worse one step ahead and slightly better from three months on, 1.117 against 1.154 at twelve. The gains are concentrated where the Granger tests placed them, at the short end.
+
+### Forecast
+
+```{r fig.width=9, fig.height=7}
+var_fc_plot(var_c, 24, 2018, "VAR(2) Forecast, 24 Months, with 80% and 95% Bands", "%")
+```
+
+From the August 2023 values, 5.33% for the policy rate and 4.28% for the 30-year, the `VAR(2)` forecasts the policy rate at 5.59% after twelve months and 5.03% after 24, the 3-month yield at 5.25% and 4.73%, and the 30-year at 5.03% and 5.15%. The 95% interval for the policy rate at twelve months runs from 3.2% to 8.0%. The forecast has the curve flattening: the short yields fall and the long yields rise, closing most of the inversion in the August 2023 data.
+
+## VAR: The Federal Funds Rate and the Macroeconomy
+
+### Data
+
+Five quarterly series from the second quarter of 1971 to the second quarter of 2023, 209 quarters, the sample set by the start of the mortgage-rate series. Real GDP, `GDPC1`, and the CPI, `CPIAUCSL`, enter as 100 times the natural log, so that changes are in %; the Federal Funds Rate, the unemployment rate and the 30-year mortgage rate are quarterly averages of the monthly or weekly data, in %. Nothing is interpolated: the monthly series are averaged to the quarterly frequency of GDP. The variables are ordered output, prices, unemployment, policy rate, mortgage rate.
+
+```{r}
+mq <- rd("GDP.xlsx"); names(mq) <- c("Date", "GDP")
+qfiles <- c(FFR = "fedfunds.xlsx", CPI = "cpi-u.xlsx", UNRATE = "unemploy.xlsx", MORT = "30-yrs-mortgage-rate.xlsx")
+for (nm in names(qfiles)) { d <- qavg(qfiles[[nm]]); names(d)[2] <- nm; mq <- merge(mq, d, by = "Date") }
+mq$LGDP <- 100 * log(mq$GDP); mq$LCPI <- 100 * log(mq$CPI)
+Ym <- ts(as.matrix(mq[, c("LGDP", "LCPI", "UNRATE", "FFR", "MORT")]), start = c(year(mq$Date[1]), quarter(mq$Date[1])), frequency = 4)
+autoplot(Ym, facets = TRUE) + ggtitle("Macroeconomic Series, Quarterly") + xlab("Year") + ylab("100 × log (GDP, CPI); % (others)")
+```
+
+```{r}
+adf_m <- t(sapply(colnames(Ym), function(v) c(Level = unname(suppressWarnings(adf.test(Ym[, v]))$statistic), `First difference` = unname(suppressWarnings(adf.test(diff(Ym[, v])))$statistic))))
+kable(data.frame(Series = colnames(Ym), Mean = round(colMeans(Ym), 2), `Std. dev.` = round(apply(Ym, 2, sd), 2), round(adf_m, 2), check.names = FALSE), row.names = FALSE, caption = "Summary Statistics and ADF Statistics")
+```
+
+Log GDP and the mortgage rate do not reject the unit root in levels; log CPI, unemployment and the policy rate reject at the 5% level on this quarterly sample, log CPI because the ADF regression includes a trend. The system is estimated in levels with a constant, for the reasons given for the yield-curve VAR, and because differencing log GDP and log CPI would discard the level relationships among output, prices and rates that the impulse responses are meant to trace.
+
+### Lag Selection
+
+```{r}
+vs_m <- VARselect(Ym, lag.max = 8, type = "const")
+kable(data.frame(Criterion = c("AIC", "HQ", "SC (BIC)", "FPE"), `Selected lag` = as.integer(vs_m$selection), check.names = FALSE), row.names = FALSE, caption = "Lag Order Selected by Each Criterion, Maximum 8")
+kable(round(vs_m$criteria[1:3, ], 2), caption = "AIC, HQ and SC by Lag Order")
+var_m <- VAR(Ym, p = 2, type = "const")
+st_m <- serial.test(var_m, lags.pt = 16, type = "PT.asymptotic")
+cat(sprintf("\nVAR(2): 5 equations, 11 coefficients each, %d observations. Largest root %.3f. Portmanteau test to lag 16: p = %s.\n", nobs(var_m$varresult$FFR), max(vars::roots(var_m)), fmt_p(st_m$serial$p.value)))
+```
+
+All four criteria select two lags. The largest root is 0.995, close to but inside the unit circle, and the portmanteau test does not reject residual whiteness (p = 0.32). The Federal Funds Rate equation has significant coefficients on its own two lags, 1.17 and −0.36, and on the second lag of the mortgage rate; the mortgage-rate equation has significant coefficients on the policy rate at both lags, 0.17 and −0.12, and on the price level at both lags.
+
+### Granger Causality
+
+```{r}
+granger_tab(Ym, 2)
+```
+
+The policy rate Granger-causes every other variable in the system, with bivariate p-values below 0.001 for output and the mortgage rate, 0.002 for prices and 0.004 for unemployment. In the other direction, output Granger-causes the policy rate (p = 0.023) and prices do so at the 10% level (p = 0.052); unemployment and the mortgage rate do not. This is the reaction function seen from the other side: the Federal Reserve's rate responds to lagged output and inflation, and the rate in turn predicts all four.
+
+### Impulse Responses
+
+```{r fig.width=9, fig.height=6}
+#| results: asis
+ir_m <- irf_plot(var_m, 20, "% (GDP, CPI: % of level)", "Quarters after shock")
+irtm <- data.frame(Series = colnames(Ym), t(sapply(colnames(Ym), function(v) round(ir_m$irf$FFR[c(1, 3, 5, 9, 13, 21), v], 3))), check.names = FALSE)
+names(irtm)[-1] <- paste0("h = ", c(0, 2, 4, 8, 12, 20))
+fe_m <- fevd(var_m, n.ahead = 20)
+irtm$`FEVD share at h = 8, %` <- sapply(fe_m, function(x) round(100 * x[8, "FFR"], 1))
+cat("\n\n"); print(kable(irtm, row.names = FALSE, caption = "Response to a One-Standard-Deviation FFR Shock and Share of Forecast-Error Variance Due to FFR Shocks")); cat("\n\n")
+```
+
+The shock is orthogonalised with the policy rate ordered after output, prices and unemployment and before the mortgage rate: the Federal Reserve is allowed to respond to the quarter's macroeconomic data, the mortgage rate is allowed to respond to the quarter's policy rate, and output, prices and unemployment respond only from the next quarter. The shock is 0.88 points, and the policy rate stays 0.57 points above baseline after a year and 0.18 after three years.
+
+Three of the four responses have the sign monetary theory predicts. Real GDP is unchanged for two quarters, then falls, to 0.49% below baseline after two years and 0.53% after three, with the 95% band excluding zero from the third quarter. Unemployment rises by 0.16 points at two to three years, with the band excluding zero from the sixth quarter. The mortgage rate rises 0.19 points on impact and 0.37 at two quarters, about 40% of the policy move, then decays with it. The price level is the exception: it rises, by 0.63% after two years, with a band that excludes zero. A positive price response to a monetary tightening is the price puzzle of the VAR literature [@sims1992], and its usual explanation is that the policy rate rises when the Federal Reserve expects inflation that the small system does not otherwise see, so the "shock" is partly anticipation of inflation. A commodity-price index or a survey measure of expected inflation is the standard remedy; neither is in this data set. Policy-rate shocks account for 63% of the two-year forecast-error variance of the policy rate, 42% for the mortgage rate, 17% for prices, 12% for output and 3% for unemployment.
+
+### Cross-Validation
+
+```{r}
+#| results: asis
+cv_var(Ym, c(0, 1, 2, 3, 4), H = 8, hs = c(1, 2, 4, 8))
+```
+
+The initial training set ends in the third quarter of 2007 and there are 63 forecast origins, so the test period is the financial crisis, the zero-rate years, the pandemic and the 2022 tightening. On this period `VAR(1)` forecasts better than `VAR(2)` on average at every horizon and for every variable but the price level one step ahead, and the random walk forecasts the policy rate better than any VAR: one step ahead its RMSE is 0.46 points against 0.50 for `VAR(1)` and 1.02 for `VAR(2)`. The VARs' advantage is in output and prices at longer horizons, where `VAR(1)` has a two-year RMSE of 3.0% for log GDP against 4.7% for the random walk, and 3.4% against 5.4% for log CPI. The pattern says that on a test period dominated by a rate held at zero for seven years and a one-quarter fall in GDP of 8%, the lag-2 dynamics estimated on 1971–2007 do not carry over, and a simpler model is safer. `VAR(2)` is retained as the model the selection criteria chose on the full sample, and the cross-validation is the caveat on its forecasts.
+
+### Forecast
+
+```{r fig.width=9, fig.height=6}
+var_fc_plot(var_m, 8, 2015, "VAR(2) Forecast, 8 Quarters, with 80% and 95% Bands", "100 × log (GDP, CPI); % (others)")
+```
+
+From the second quarter of 2023 the `VAR(2)` forecasts the policy rate falling from 4.99% to 4.06% after four quarters and 2.91% after eight, unemployment rising from 3.6% to 4.8% and 5.6%, the mortgage rate easing from 6.51% to 5.76%, real GDP flat over the two years, and the price level rising 2.5% a year. It is the profile of a slowdown in which the Federal Reserve cuts rates as unemployment rises. The cross-validation above shows this model's policy-rate forecasts have been poor over the last fifteen years, and the intervals are wide: the 95% band for the policy rate at eight quarters runs from −1.7% to 7.5%.
 
 ## Summary
+
+```{r}
+summary_tab <- data.frame(
+  Section = c("ARIMAX, inflation", "ARIMAX, 30-year yield", "VAR, Treasury curve", "VAR, macroeconomy"),
+  Frequency = c("Monthly", "Monthly", "Monthly", "Quarterly"),
+  Sample = c("1955–2023", "1977–2023", "1982–2023", "1971–2023"),
+  `Retained model` = c("ARMA(2,1)(2,0,0)[12] errors, FFR lagged 12 months", "MA(2) errors, change in FFR", "VAR(2), levels, constant", "VAR(2), levels, constant"),
+  `Effect of the FFR` = c("Coefficient 0.008 (s.e. 0.009); no forecast gain", "Coefficient 0.126 (s.e. 0.022); RMSE 1–2% lower", "Granger-causes yields to 1 year; not 5 to 30 years", "Granger-causes all four; GDP −0.5%, unemployment +0.16 at 2–3 years"),
+  check.names = FALSE)
+kable(summary_tab, row.names = FALSE, caption = "Retained Models and Main Findings")
+```
+
+### What the Models Found
+
+The four models agree on where the policy rate's influence is direct and where it is not. In the Treasury market, the effect runs through the short end. The policy rate Granger-causes the 3-month, 6-month and 1-year yields and not the longer ones; the impulse responses show the 3-month yield moving three-quarters of the way with the policy rate on impact and nine-tenths after a year, while the 30-year moves a quarter on impact and a half after a year; and the single-equation regression puts the same-month pass-through to the 30-year yield at 0.13. Every yield Granger-causes the policy rate, which is the market anticipating the Federal Reserve. In the macroeconomy the policy rate Granger-causes output, prices, unemployment and the mortgage rate; a 0.9-point tightening shock lowers real GDP by half a percent over two to three years and raises unemployment by 0.16 points, with the mortgage rate absorbing about 40% of the move within two quarters.
+
+The inflation regression is the model that did not find an effect, and the reason is instructive. The policy rate lagged a year has a coefficient indistinguishable from zero and adds nothing to inflation forecasts; the policy rate lagged a month has a positive, significant coefficient and makes the forecasts worse. Both results are what a reaction function produces. The Federal Reserve raises the rate when inflation is high, so the rate is correlated with inflation in the wrong direction for a causal reading and in a direction that does not survive out of sample. The VAR, which lets both variables respond to each other, finds that the policy rate Granger-causes prices, but its impulse response has the price level rising after a tightening, the price puzzle. The macroeconomic effect of policy on inflation is the one question in this section the data set cannot answer cleanly, because the system lacks the variable that would let it separate the Federal Reserve's information from its action.
+
+### Model Choice
+
+The regression form suits the 30-year yield and does not suit inflation. The Federal Reserve does not set the policy rate in response to the 30-year yield, so treating the policy rate as exogenous to it is a reasonable approximation at monthly frequency, and the estimated pass-through is the kind of quantity a regression can deliver. The Federal Reserve does set the policy rate in response to inflation, and a regression of inflation on the policy rate estimates that response as much as it estimates transmission. The twelve-month lag makes the regressor predetermined but cannot make it exogenous, since the rate a year ago responded to inflation a year ago, which is correlated with inflation today. For questions of effect, the VAR is the right instrument in this data set.
+
+The two VARs are estimated in levels on series the exploratory analysis identified as I(1) with stationary spreads, that is, cointegrated. A levels VAR is consistent for the quantities used here, and imposing the cointegrating restrictions through a VECM would sharpen the long-horizon responses and the forecasts. Both selections settled on two lags, and in both the residuals are not fully white or the cross-validation prefers a simpler model, which is the usual position of a small VAR on fifty years of data that include several policy regimes. The macroeconomic VAR would be improved by a measure of expected inflation or commodity prices, which is how the price puzzle is normally resolved.
+
+### Forecasting
+
+None of the four models forecasts well far ahead, and none should be expected to. The inflation model forecasts 4.5% for the year from September 2023, carrying forward the 2021–2023 persistence, against 3.6% in the year before. The 30-year model has no information beyond two months once the policy rate is held fixed. The yield-curve VAR beats a random walk by 6% one step ahead and 2% at a year, entirely at the short end. The macroeconomic VAR's policy-rate forecasts were worse than a random walk over 2007–2023, and its eight-quarter projection, a policy rate of 2.9%, unemployment at 5.6% and flat real GDP, should be read as the pattern of a typical easing cycle in the sample rather than a prediction.
+
+### Limitations
+
+The findings rest on Granger causality and orthogonalised impulse responses, both of which identify effects from the ordering of variables in time and within the period, not from any measure of the Federal Reserve's intentions. The yield-curve VAR uses the effective rate, which moved with the target during the 1982–2008 period and sat at the floor of the target range from 2009 to 2015 and 2020 to 2022; a VAR on that sample treats a rate the Federal Reserve could not lower as an ordinary observation. The short-maturity yields are reconstructed from spreads and differ from the published constant-maturity yields by the averaging convention. The macroeconomic VAR has five variables and 209 quarters; with two lags each equation has 11 coefficients, which is adequate, but the bootstrap bands are wide at long horizons, and the cross-validation on the post-2007 period shows the estimated dynamics do not hold at the zero bound.

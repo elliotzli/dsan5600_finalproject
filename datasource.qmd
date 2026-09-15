@@ -1,6 +1,9 @@
 ---
 title: "Data Source"
 subtitle: "Federal Reserve Economic Data"
+date: "2023-12-3"
+date-modified: today
+date-format: long
 format: 
   html:
     smooth-scroll: true
@@ -8,8 +11,7 @@ format:
     code-fold: true
     code-tools: true
     embed-resources: true
-    mermaid:
-      theme: neutral
+    lightbox: true
 bibliography: citation.bib
 execute: 
   echo: false
@@ -17,62 +19,80 @@ execute:
 ---
 
 ***
+### Federal Reserve Economic Data
 
-Federal Reserve Economic Data (FRED), is a top pick for anyone diving into economic and financial projects, offering a reliable data pool that is free for public usage. It's user-friendly and hosts a wide array of economic markers, from the local to global scales, making it a versatile tool for various analyses, including exploring Treasury bill yields. The platform keeps its data up to date, providing a solid base for relevant research. And with easy access to both U.S. and international data, you can explore and compare economic trends from various angles. So, whether you're seasoned in data analysis or just starting, FRED provides a straightforward, accessible, and dependable data source to anchor your research.
+FRED is an online database maintained by the Research Division of the Federal Reserve Bank of St. Louis. It holds more than 800,000 economic time series from over 100 sources, including the Federal Reserve Board, the Bureau of Labor Statistics, the Bureau of Economic Analysis, and the U.S. Treasury. Access is free. Every series has a fixed identifier, a stated frequency and unit, and a record of past revisions, which makes the data straightforward to cite and to reproduce. All series in this project come from @fred.
 
-Below is a prelimiary collection of relevant datasets to federal funds rates, including Fed Funds Rate, Consumer Price Index, Unemployment Rate, U.S. Dollar Index, Consumer Sentiment, 10 Year Treasury Bill Rate, S&P 500 Index, and 30 Year Mortgage Rate, etc.
+Each series was downloaded as a spreadsheet with two columns: `observation_date` and the observed value, with the value column named by its FRED identifier. Downloads were made in late 2023, so most series end between August and October of that year.
+
+### Series
+
+The table lists every series used in the project. The FRED identifier links to the series page, which documents the source agency, the release schedule, and any seasonal adjustment.
+
+| Series | FRED ID | Frequency | Units | Range | Used in |
+|:---|:---|:---|:---|:---|:---|
+| Federal Funds Effective Rate | [FEDFUNDS](https://fred.stlouisfed.org/series/FEDFUNDS) | Monthly | Percent | 1954–2023 | ARIMAX, ARCH/GARCH, Deep Learning, EDA, Visualization |
+| 3-Month Treasury Bill minus Fed Funds | [T3MFF](https://fred.stlouisfed.org/series/T3MFF) | Daily | Percentage points | 1982–2023 | ARMA, ARIMAX, EDA, Visualization |
+| 6-Month Treasury Bill minus Fed Funds | [T6MFF](https://fred.stlouisfed.org/series/T6MFF) | Daily | Percentage points | 1982–2023 | ARMA, ARIMAX, EDA, Visualization |
+| 1-Year Treasury minus Fed Funds | [T1YFF](https://fred.stlouisfed.org/series/T1YFF) | Daily | Percentage points | 1962–2023 | ARIMAX, EDA, Visualization |
+| 5-Year Treasury minus Fed Funds | [T5YFF](https://fred.stlouisfed.org/series/T5YFF) | Daily | Percentage points | 1962–2023 | ARIMAX |
+| 10-Year Treasury, Constant Maturity | [DGS10](https://fred.stlouisfed.org/series/DGS10) | Daily | Percent | 1962–2023 | ARIMAX, EDA, Visualization |
+| 20-Year Treasury, Constant Maturity | [DGS20](https://fred.stlouisfed.org/series/DGS20) | Daily | Percent | 1962–2023 | EDA, Visualization |
+| 30-Year Treasury, Constant Maturity | [DGS30](https://fred.stlouisfed.org/series/DGS30) | Daily | Percent | 1977–2023 | ARIMAX, EDA, Visualization |
+| 30-Year Fixed Rate Mortgage Average | [MORTGAGE30US](https://fred.stlouisfed.org/series/MORTGAGE30US) | Weekly | Percent | 1971–2023 | ARIMAX, EDA, Visualization |
+| Consumer Price Index, All Urban Consumers | [CPIAUCSL](https://fred.stlouisfed.org/series/CPIAUCSL) | Monthly | Index, 1982–84 = 100 | 1947–2023 | ARMA, ARIMAX, EDA, Visualization |
+| Real Gross Domestic Product | [GDPC1](https://fred.stlouisfed.org/series/GDPC1) | Quarterly | \$ billions, chained 2017 | 1947–2023 | ARMA, ARIMAX, EDA, Visualization |
+| Unemployment Rate | [UNRATE](https://fred.stlouisfed.org/series/UNRATE) | Monthly | Percent | 1948–2023 | ARIMAX, EDA, Visualization |
+| Consumer Sentiment, University of Michigan | [UMCSENT](https://fred.stlouisfed.org/series/UMCSENT) | Monthly | Index, 1966 Q1 = 100 | 1952–2023 | Deep Learning |
+| Nominal Broad U.S. Dollar Index | [DTWEXBGS](https://fred.stlouisfed.org/series/DTWEXBGS) | Daily | Index, Jan 2006 = 100 | 2006–2023 | ARCH/GARCH, EDA, Visualization |
+| S&P 500 | [SP500](https://fred.stlouisfed.org/series/SP500) | Daily | Index level | 2013–2023 | ARCH/GARCH |
+
+: {.striped .hover tbl-colwidths="[30,13,9,17,10,21]"}
+
+### Spreads, Not Yields
+
+Four of the identifiers end in `FF`. These are not Treasury yields. Each is the yield at that maturity minus the effective Federal Funds Rate on the same day, in % points. A value of 0.50 for `T3MFF` means the 3-month bill yielded half a point more than the policy rate. The spreads measure how far market rates at the short end sit from the Fed's target, which is the relationship this project is built around. They are the inputs to the ARMA section and to the short-term visualizations, and, with the policy rate added back, they supply the short-maturity yields in the ARIMAX section's yield-curve VAR. The `DGS` series are the yields themselves, at constant maturity, and cover the long end of the curve.
+
+### Frequency
+
+The series arrive at four frequencies. Treasury yields, the spreads, and the dollar index are daily, on Treasury market trading days. The mortgage rate is weekly, published on Thursdays. The Federal Funds Rate, CPI, unemployment, and consumer sentiment are monthly. Real GDP is quarterly. Where a model needs a single frequency, the analysis section states how the series were aligned.
+
+### Merged Files
+
+Two files combine several series on a common date index. `sr_t-bill-rates` holds the three short-maturity spreads on the daily Treasury calendar from January 1982, with no gaps. `t-bill-vs-econ-index` places nine series on the same daily calendar from January 1962. The lower-frequency series in that file are not filled forward: CPI, the Federal Funds Rate, unemployment, and GDP appear only on their release dates and are empty on every other row. The previews below show the structure.
 
 ```{r}
-library(readxl)
-df1 <- read_excel('data/data/t-bill-vs-econ-index.xlsx')
-df2 <- read_excel('data/data/sr_t-bill-rates.xlsx')
+suppressMessages(library(readxl))
+library(knitr)
+options(knitr.kable.NA = "—")
+
+sr <- read_excel("data/data/sr_t-bill-rates.xlsx")
+sr$observation_date <- as.Date(sr$observation_date)
+
+mx <- read_excel("data/data/t-bill-vs-econ-index.xlsx",
+                 col_types = c("date", rep("numeric", 9)))
+mx$observation_date <- as.Date(mx$observation_date)
 ```
 
 ::: panel-tabset
-## Short Term T-Bill Rate
+## Short-Term Spreads
+
+`sr_t-bill-rates.xlsx` — 10,420 daily rows, 1982–2023.
 
 ```{r}
-df2
+kable(head(sr, 8),
+      col.names = c("Date", "T3MFF", "T6MFF", "T1YFF"),
+      align = "lrrr", digits = 2)
 ```
 
-## Economic Indicator
+## Yields and Economic Indicators
+
+`t-bill-vs-econ-index.xlsx` — 15,974 daily rows, 1962–2023. Shown from 1 August 2023, a monthly release date.
 
 ```{r}
-df1
+win <- mx[mx$observation_date >= as.Date("2023-08-01"), ][1:8, ]
+kable(win,
+      col.names = c("Date", names(win)[-1]),
+      align = c("l", rep("r", 9)), digits = 2)
 ```
 :::
-Treasury Bill Yield
-
-:   Search <https://fred.stlouisfed.org> + Key Word (eg. 3-Month Treasury)
-
-Federal Funds Effective Rate
-
-:   <https://fred.stlouisfed.org/series/FEDFUNDS>
-
-30-Year Fixed Rate Mortgage Average
-
-:   <https://fred.stlouisfed.org/series/MORTGAGE30US>
-
-Consumer Sentiment
-
-:   <https://fred.stlouisfed.org/series/UMCSENT>
-
-Consumer Price Index for All Urban Consumers
-
-:   <https://fred.stlouisfed.org/series/CPIAUCSL>
-
-Gross Domestic Product
-
-:   <https://fred.stlouisfed.org/series/GDP>
-
-Unemployment Rate
-
-:   <https://fred.stlouisfed.org/series/UNRATE>
-
-Nominal Broad U.S. Dollar Index
-
-:   <https://fred.stlouisfed.org/series/DTWEXBGS>
-
-S&P 500
-
-:   <https://fred.stlouisfed.org/series/SP500>
